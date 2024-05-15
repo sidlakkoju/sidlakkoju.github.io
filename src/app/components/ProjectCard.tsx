@@ -10,7 +10,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ title, description, mediaUrl 
   return (
     <div className="bg-white shadow-lg rounded-lg overflow-hidden mb-6">
       <div className="h-80 overflow-hidden">
-        <video className="w-full h-full object-cover" src={mediaUrl} autoPlay loop muted />
+        <video className="w-full h-full object-cover" src={mediaUrl} autoPlay loop muted playsInline/>
       </div>
       <div className="p-4">
         <h3 className="text-xl font-semibold mb-2">{title}</h3>
@@ -21,3 +21,4 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ title, description, mediaUrl 
 };
 
 export default ProjectCard;
+
