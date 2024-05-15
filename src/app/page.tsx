@@ -1,4 +1,5 @@
 import React from 'react';
+import ProjectCard from './components/ProjectCard';
 
 const Home: React.FC = () => {
   return (
@@ -16,12 +17,24 @@ const Home: React.FC = () => {
       </section>
 
       <section className="mt-8">
-        <h3 className="text-2xl">Projects</h3>
-        <ul className="mt-2">
-          <li>Project 1 - Description</li>
-          <li>Project 2 - Description</li>
-          <li>Project 3 - Description</li>
-        </ul>
+        <h3 className="text-2xl mb-4">Projects</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <ProjectCard
+            title="Project 1"
+            description="Description of Project 1"
+            mediaUrl="/Mitre_demo.mp4"
+          />
+          <ProjectCard
+            title="Project 2"
+            description="Description of Project 2"
+            mediaUrl="/path-to-your-video-or-gif-2.mp4"
+          />
+          <ProjectCard
+            title="Project 3"
+            description="Description of Project 3"
+            mediaUrl="/path-to-your-video-or-gif-3.mp4"
+          />
+        </div>
       </section>
     </div>
   );

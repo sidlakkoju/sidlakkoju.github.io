@@ -8,6 +8,12 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      height: {
+        '72': '18rem',  // Custom height class (h-72)
+        '80': '20rem',  // Custom height class (h-80)
+        '96': '24rem',  // Custom height class (h-96)
+        '128': '32rem', // Custom height class (h-128)
+      },
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
         "gradient-conic":
