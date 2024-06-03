@@ -46,7 +46,7 @@ const Home: React.FC = () => {
             title="Appian Software Engineer Intern (2023)"
             description= {
               <>
-                Implemented Log Based alerting with Grafana Loki to complement the Prometheus metric based alerting. Significantly reduced incident reponse times for situations where metrics weren't sufficient
+                Implemented Log Based alerting with Grafana Loki to complement the Prometheus metric based alerting. Significantly reduced incident reponse times for situations where metrics weren&apos;t sufficient
                 <br />
                 Developed an LLM assisted internal documentation assistant for Appian Interal docs. User queries are converted to embeddings and then compared to different documentation sections (using cosine similarity formula). Once the most similar/relevant documentation is found, the text is fed into the Llama2-7B-chat model along with the user query allowing for an intuitive chat interface.
               </>
