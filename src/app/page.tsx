@@ -6,7 +6,6 @@ const Home: React.FC = () => {
   return (
     <div>
       <section className="text-center mt-8">
-
         <div className="w-60 h-60 rounded-full overflow-hidden mx-auto">
           <img 
             src="/profile-pic.jpeg" 
@@ -14,8 +13,6 @@ const Home: React.FC = () => {
             className="w-full h-full object-cover" 
           />
         </div>
-
-
 
         <h1 className="text-5xl mt-4">Sid Lakkoju</h1>
         <p className="text-gray-600 mt-2">Computer Science @ UVA</p>
@@ -39,13 +36,26 @@ const Home: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <ProjectCard
             title="MITRE Software Engineer Intern (2022)"
-            description="Description of Project 1"
+            description="Designed an AR Navigation system all Mitre Campuses using existing internal 2D MapsIndoors maps (no need for precise 3D campus rescanning). Utilized strategically placed reference image (image and pose recognition) in conjunction with Cisco DNA Spaces for precise user localization. Utilized ARKit for iOS and Unity for Android to render and display AR entities."
             mediaUrl="/Mitre_demo.mp4"
+            links={[
+              { url: 'https://www.mitre.org', type: 'link' },
+            ]}
           />
           <ProjectCard
             title="Appian Software Engineer Intern (2023)"
-            description="Description of Project 2"
-            mediaUrl="/path-to-your-video-or-gif-2.mp4"
+            description= {
+              <>
+                Implemented Log Based alerting with Grafana Loki to complement the Prometheus metric based alerting. Significantly reduced incident reponse times for situations where metrics weren't sufficient
+                <br />
+                Developed an LLM assisted internal documentation assistant for Appian Interal docs. User queries are converted to embeddings and then compared to different documentation sections (using cosine similarity formula). Once the most similar/relevant documentation is found, the text is fed into the Llama2-7B-chat model along with the user query allowing for an intuitive chat interface.
+              </>
+            }
+            mediaUrl="appian.png"
+            mediaType='image'
+            links={[
+              { url: 'https://appian.com', type: 'link' }
+            ]}
           />
         </div>
       </section>
@@ -56,27 +66,48 @@ const Home: React.FC = () => {
           <ProjectCard
             title="Cavalier Autonomous Racing Perception Engineer"
             description="Description of Project 1"
-            mediaUrl=""
+            mediaUrl="pits.mp4"
+            links={[
+              { url: 'https://autonomousracing.dev', type: 'link' }
+            ]}
+            
           />
           <ProjectCard
             title="VTOL"
             description="Description of Project 2"
-            mediaUrl="/path-to-your-video-or-gif-2.mp4"
+            mediaUrl="vtol_demo.mp4"
           />
           <ProjectCard
             title="Uvacourseexplorer.com"
             description="Description of Project 2"
-            mediaUrl="/path-to-your-video-or-gif-2.mp4"
+            mediaType='image'
+            mediaUrl="course_explorer.png"
+            links={[
+              { url: 'https://github.com/UVA-Course-Explorer', type: 'github' },
+              { url: 'https://www.uvacourseexplorer.com', type: 'link' }
+            ]}
+
+
+            
           />
           <ProjectCard
             title="DQN Reinforcement Learning"
             description="Description of Project 2"
-            mediaUrl="/path-to-your-video-or-gif-2.mp4"
+            mediaUrl="dqn_demo.mp4"
+            links={[
+              { url: 'https://github.com/your-github-repo', type: 'github' },
+              { url: 'https://youtube.com/your-video-link', type: 'youtube' },
+            ]}
           />
           <ProjectCard
             title="Airpods IMU controlled Drone"
             description="Description of Project 2"
-            mediaUrl="/path-to-your-video-or-gif-2.mp4"
+            mediaUrl="airpods_control_demo.mp4"
+            links={[
+              { url: 'https://github.com/sidlakkoju/Airpods-Controlled-Drone', type: 'github' },
+              { url: 'https://www.youtube.com/watch?v=3vd3l164FqA', type: 'youtube' },
+              { url: 'https://devpost.com/software/raven-tg9ksp', type: 'link' }
+            ]}
           />
         </div>
       </section>
