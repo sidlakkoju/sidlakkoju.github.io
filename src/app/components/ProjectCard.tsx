@@ -4,14 +4,14 @@ import { FaLink } from 'react-icons/fa6';
 
 interface ProjectLink {
   url: string;
-  type: 'github' | 'youtube' | 'link'; // Extendable for other types
+  type: 'github' | 'youtube' | 'link'; 
 }
 
 interface ProjectCardProps {
   title: string;
-  description: React.ReactNode; // Change type to ReactNode to support JSX
+  description: React.ReactNode; 
   mediaUrl: string;
-  mediaType?: 'image' | 'video'; // Optional prop with default
+  mediaType?: 'image' | 'video';
   links?: ProjectLink[];
 }
 
