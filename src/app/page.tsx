@@ -83,7 +83,7 @@ const Home: React.FC = () => {
               <>
                 Designed and developed the mechanical, electrical, and software components for a tilt-rotor VTOL (vertical take-off and landing) aircraft.
                 <br />
-                "CAD"ed and 3D printed the custom tilt-rotor and thrustvetoring assembly. This compact mechanism allows for precise and accurate thrustvectoring control and horizontal/vertical flight transition using a single 9-gram servo. 
+                &quot;CAD&quot;ed and 3D printed the custom tilt-rotor and thrustvetoring assembly. This compact mechanism allows for precise and accurate thrustvectoring control and horizontal/vertical flight transition using a single 9-gram servo. 
                 <br />
                 A Teensy 4.0 running a modified version of DrehmFlightVTOL serves as the flight controller of the aircraft ensuring smooth flight mode transitions and stablization. 
               </>
