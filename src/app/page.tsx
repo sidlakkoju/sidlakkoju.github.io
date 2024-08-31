@@ -34,14 +34,25 @@ const Home: React.FC = () => {
       <section className="mt-8">
         <h3 className="text-3xl mb-4">Experience</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+  
           <ProjectCard
-            title="MITRE Software Engineer Intern (2022)"
-            description="Designed an AR Navigation system all Mitre Campuses using existing internal 2D MapsIndoors maps (no need for precise 3D campus rescanning). Low accuracy wifi localization (Cisco Spaces) was used to fetch the metadata of nearby geospatially anchored reference images to the users device. Image and pose recognition was then used to identify a reference image in the users environment and then precisely localize the user in the global map frame. Utilized ARKit for iOS and Unity for Android to render and display AR entities."
-            mediaUrl="/Mitre_demo.mp4"
+            title="Appian Software Engineer Intern (2024)"
+            description= {
+              <>
+                Developed and deployed novel Rust and C-based authentication plugin for MariaDB, replacing the existing Java solution eliminating JVM overhead on RDBMS Kubernetes pod.
+                <br />
+                Built asynchronous web server with Rust Warp for temporary password generation and management.
+                <br />
+                Implemented unit and system tests, including mocking third-party APIs, and automated the build and deployment processes for authentication plugin via Gitlab CI/CD.
+              </>
+            }
+            mediaUrl="appian_2024.png"
+            mediaType='image'
             links={[
-              { url: 'https://www.mitre.org', type: 'link' },
+              { url: 'https://appian.com', type: 'link' }
             ]}
           />
+          
           <ProjectCard
             title="Appian Software Engineer Intern (2023)"
             description= {
@@ -55,6 +66,14 @@ const Home: React.FC = () => {
             mediaType='image'
             links={[
               { url: 'https://appian.com', type: 'link' }
+            ]}
+          />
+          <ProjectCard
+            title="MITRE Software Engineer Intern (2022)"
+            description="Designed an AR Navigation system all Mitre Campuses using existing internal 2D MapsIndoors maps (no need for precise 3D campus rescanning). Low accuracy wifi localization (Cisco Spaces) was used to fetch the metadata of nearby geospatially anchored reference images to the users device. Image and pose recognition was then used to identify a reference image in the users environment and then precisely localize the user in the global map frame. Utilized ARKit for iOS and Unity for Android to render and display AR entities."
+            mediaUrl="/Mitre_demo.mp4"
+            links={[
+              { url: 'https://www.mitre.org', type: 'link' },
             ]}
           />
         </div>
