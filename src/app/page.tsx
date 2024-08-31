@@ -1,5 +1,6 @@
 import React from 'react';
 import { FaYoutube, FaGithub, FaLinkedin } from 'react-icons/fa';
+import { HiDocumentText } from "react-icons/hi2";
 import ProjectCard from './components/ProjectCard';
 
 const Home: React.FC = () => {
@@ -27,6 +28,9 @@ const Home: React.FC = () => {
           </a>
           <a href="https://www.linkedin.com/in/siddharthlakkoju/" target="_blank" className="transform hover:scale-125 transition-transform duration-200">
             <FaLinkedin className="text-blue-700 w-8 h-8" />
+          </a>
+          <a href="/resume.pdf" target="_blank" className="transform hover:scale-125 transition-transform duration-200">
+            <HiDocumentText className="text-gray-800 dark:text-white w-8 h-8" />
           </a>
         </div>
       </section>
