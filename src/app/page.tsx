@@ -16,7 +16,7 @@ const Home: React.FC = () => {
         </div>
 
         <h1 className="text-5xl mt-4">Sid Lakkoju</h1>
-        <p className="text-gray-600 mt-2">Computer Science @ UVA</p>
+        <p className="text-gray-600 mt-2">Software Engineer @ SpaceX 🚀</p>
         <p className="mt-4">The world is pretty cool, lets make it cooler ;)</p>
 
         <div className="flex justify-center space-x-14 mt-4">
@@ -35,53 +35,9 @@ const Home: React.FC = () => {
         </div>
       </section>
 
-      <section className="mt-8">
-        <h3 className="text-3xl mb-4">Experience</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-  
-          <ProjectCard
-            title="Appian Software Engineer Intern (2024)"
-            description= {
-              <>
-                Developed and deployed novel Rust and C-based authentication plugin for MariaDB, replacing the existing Java solution eliminating JVM overhead on RDBMS Kubernetes pod.
-                <br />
-                Built asynchronous web server with Rust Warp for temporary password generation and management.
-                <br />
-                Implemented unit and system tests, including mocking third-party APIs, and automated the build and deployment processes for authentication plugin via Gitlab CI/CD.
-              </>
-            }
-            mediaUrl="appian_2024.png"
-            mediaType='image'
-            links={[
-              { url: 'https://appian.com', type: 'link' }
-            ]}
-          />
-          
-          <ProjectCard
-            title="Appian Software Engineer Intern (2023)"
-            description= {
-              <>
-                Implemented Log Based alerting with Grafana Loki to complement the Prometheus metric based alerting. Significantly reduced incident reponse times for situations where metrics weren&apos;t sufficient.
-                <br />
-                Developed an LLM assisted internal documentation assistant for Appian Interal docs. User queries are converted to embeddings and then compared to different documentation sections (using cosine similarity formula). Once the most similar/relevant documentation is found, the text is fed into the Llama2-7B-chat model along with the user query allowing for an intuitive chat interface.
-              </>
-            }
-            mediaUrl="appian.png"
-            mediaType='image'
-            links={[
-              { url: 'https://appian.com', type: 'link' }
-            ]}
-          />
-          <ProjectCard
-            title="MITRE Software Engineer Intern (2022)"
-            description="Designed an AR Navigation system all Mitre Campuses using existing internal 2D MapsIndoors maps (no need for precise 3D campus rescanning). Low accuracy wifi localization (Cisco Spaces) was used to fetch the metadata of nearby geospatially anchored reference images to the users device. Image and pose recognition was then used to identify a reference image in the users environment and then precisely localize the user in the global map frame. Utilized ARKit for iOS and Unity for Android to render and display AR entities."
-            mediaUrl="/Mitre_demo.mp4"
-            links={[
-              { url: 'https://www.mitre.org', type: 'link' },
-            ]}
-          />
-        </div>
-      </section>
+
+      
+
 
       <section className="mt-8">
         <h3 className="text-3xl mb-4">Projects</h3>
@@ -166,6 +122,55 @@ const Home: React.FC = () => {
           />
         </div>
       </section>
+
+      <section className="mt-8">
+        <h3 className="text-3xl mb-4">Past Experience</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">  
+          <ProjectCard
+            title="Appian Software Engineer Intern (2024)"
+            description= {
+              <>
+                Developed and deployed novel Rust and C-based authentication plugin for MariaDB, replacing the existing Java solution eliminating JVM overhead on RDBMS Kubernetes pod.
+                <br />
+                Built asynchronous web server with Rust Warp for temporary password generation and management.
+                <br />
+                Implemented unit and system tests, including mocking third-party APIs, and automated the build and deployment processes for authentication plugin via Gitlab CI/CD.
+              </>
+            }
+            mediaUrl="appian_2024.png"
+            mediaType='image'
+            links={[
+              { url: 'https://appian.com', type: 'link' }
+            ]}
+          />
+          
+          <ProjectCard
+            title="Appian Software Engineer Intern (2023)"
+            description= {
+              <>
+                Implemented Log Based alerting with Grafana Loki to complement the Prometheus metric based alerting. Significantly reduced incident reponse times for situations where metrics weren&apos;t sufficient.
+                <br />
+                Developed an LLM assisted internal documentation assistant for Appian Interal docs. User queries are converted to embeddings and then compared to different documentation sections (using cosine similarity formula). Once the most similar/relevant documentation is found, the text is fed into the Llama2-7B-chat model along with the user query allowing for an intuitive chat interface.
+              </>
+            }
+            mediaUrl="appian.png"
+            mediaType='image'
+            links={[
+              { url: 'https://appian.com', type: 'link' }
+            ]}
+          />
+          <ProjectCard
+            title="MITRE Software Engineer Intern (2022)"
+            description="Designed an AR Navigation system all Mitre Campuses using existing internal 2D MapsIndoors maps (no need for precise 3D campus rescanning). Low accuracy wifi localization (Cisco Spaces) was used to fetch the metadata of nearby geospatially anchored reference images to the users device. Image and pose recognition was then used to identify a reference image in the users environment and then precisely localize the user in the global map frame. Utilized ARKit for iOS and Unity for Android to render and display AR entities."
+            mediaUrl="/Mitre_demo.mp4"
+            links={[
+              { url: 'https://www.mitre.org', type: 'link' },
+            ]}
+          />
+        </div>
+      </section>
+
+
     </div>
   );
 };
