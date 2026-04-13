@@ -9,6 +9,31 @@ const name = "Sid Lakkoju";
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="generator" content={Astro.generator} />
 		<title>{name}</title>
+		<meta name="description" content="Sid Lakkoju — engineer at SpaceX. Personal site, projects, and links." />
+		<meta name="author" content={name} />
+		<link rel="canonical" href="https://sidlakkoju.github.io/" />
+
+		<meta property="og:title" content={name} />
+		<meta property="og:description" content="Engineer at SpaceX. Projects and writing." />
+		<meta property="og:url" content="https://sidlakkoju.github.io/" />
+		<meta property="og:type" content="website" />
+		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:title" content={name} />
+		<meta name="twitter:description" content="Engineer at SpaceX. Projects and writing." />
+
+		<script type="application/ld+json" set:html={JSON.stringify({
+			"@context": "https://schema.org",
+			"@type": "Person",
+			"name": "Sid Lakkoju",
+			"url": "https://sidlakkoju.github.io",
+			"sameAs": [
+				"https://github.com/sidlakkoju",
+				"https://www.linkedin.com/in/sidlakkoju/",
+				"https://www.youtube.com/@SidLakkoju"
+			],
+			"jobTitle": "Engineer",
+			"worksFor": { "@type": "Organization", "name": "SpaceX" }
+		})} />
 	</head>
 	<body>
 		<canvas id="glcanvas" tabindex="1"></canvas>
