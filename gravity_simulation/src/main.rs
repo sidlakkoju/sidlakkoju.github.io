@@ -48,7 +48,19 @@ const MASS_ROW_OFFSET: f32 = 16.0;
 const MASS_FONT_SIZE: u16 = 18;
 
 // Cycled through when the user adds bodies via the + button.
-const PALETTE: &[Color] = &[YELLOW, BLUE, RED, GREEN, PURPLE, ORANGE, PINK, SKYBLUE, LIME, GOLD];
+// const PALETTE: &[Color] = &[YELLOW, BLUE, RED, GREEN, PURPLE, ORANGE, PINK, SKYBLUE, LIME, GOLD];
+const PALETTE: &[Color] = &[
+    Color::from_hex(0x00F0FF),
+    Color::from_hex(0x2E5BFF),
+    Color::from_hex(0xC0C8D8),
+    Color::from_hex(0x0B0F1A),
+    Color::from_hex(0x008B8B),
+    Color::from_hex(0xB22222),
+    Color::from_hex(0xFF4500),
+    Color::from_hex(0xB57EDC),
+    Color::from_hex(0x0A1A40),
+    Color::from_hex(0xFF2D95),
+];
 
 // A single gravitating body with position, velocity, mass, radius, and color.
 #[derive(Clone, Copy, Debug)]
@@ -361,7 +373,7 @@ fn initial_bodies(cx: f32, cy: f32) -> Vec<Body> {
         let angle = start_angle + i as f32 * angle_step;
         let pos = vec2(cx + spread * angle.cos(), cy - spread * angle.sin());
         let vel = vec2(-angle.sin(), -angle.cos()) * speed;
-        Body::new(pos, vel, 10000.0, 30.0, [YELLOW, BLUE, RED][i])
+        Body::new(pos, vel, 10000.0, 30.0, PALETTE[i % PALETTE.len()])
     }).collect()
 }
 
