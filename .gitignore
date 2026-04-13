@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Rust
+gravity_simulation/target/
+gravity_simulation/testing/
+
+# Node / Astro
+site/node_modules/
+site/dist/
+site/.astro/
+
+# The built wasm is checked in to site/public/sim/ for now so the site
+# works without a full CI build. The GitHub Actions workflow regenerates
+# it on deploy; local builds can too. If you'd rather not commit it,
+# uncomment the next line and always rely on CI.
+# site/public/sim/gravity_simulation.wasm

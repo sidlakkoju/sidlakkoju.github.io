@@ -1,0 +1,82 @@
+---
+const name = "Sid Lakkoju";
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="generator" content={Astro.generator} />
+		<title>{name}</title>
+	</head>
+	<body>
+		<canvas id="glcanvas" tabindex="1"></canvas>
+
+		<main>
+			<h1>{name}</h1>
+			<p>Portfolio — coming soon</p>
+		</main>
+
+		<script is:inline src="/sim/mq_js_bundle.js"></script>
+		<script is:inline>
+			// macroquad's shim exposes `load(path)` once mq_js_bundle.js has run.
+			// Honor prefers-reduced-motion by skipping the sim entirely.
+			const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+			if (!reduce) {
+				load("/sim/gravity_simulation.wasm");
+			} else {
+				document.getElementById("glcanvas").style.display = "none";
+			}
+		</script>
+
+		<style is:global>
+			html, body {
+				margin: 0;
+				padding: 0;
+				height: 100%;
+				background: #000;
+				color: #fff;
+				font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+				overflow: hidden;
+			}
+
+			#glcanvas {
+				position: fixed;
+				inset: 0;
+				width: 100vw;
+				height: 100vh;
+				display: block;
+				z-index: 0;
+				pointer-events: none;
+			}
+
+			main {
+				position: relative;
+				z-index: 1;
+				min-height: 100vh;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: center;
+				text-align: center;
+				pointer-events: none;
+			}
+
+			h1 {
+				margin: 0;
+				font-size: clamp(2.5rem, 8vw, 6rem);
+				font-weight: 600;
+				letter-spacing: -0.02em;
+				mix-blend-mode: difference;
+			}
+
+			p {
+				margin: 0.5rem 0 0;
+				font-size: clamp(0.9rem, 2vw, 1.1rem);
+				opacity: 0.7;
+				mix-blend-mode: difference;
+			}
+		</style>
+	</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(cargo --version)",
+      "Bash(rustup target:*)",
+      "Bash(rm -rf /Users/siddharthlakkoju/Documents/Code/website/gravity_simulation/.git)",
+      "Bash(git init:*)",
+      "Bash(npm create:*)",
+      "Bash(cargo build:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(curl -s http://localhost:4321/)"
+    ]
+  }
+}

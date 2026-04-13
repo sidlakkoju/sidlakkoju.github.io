@@ -1,0 +1,20 @@
+[package]
+name = "gravity_simulation"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+macroquad = "0.4"
+
+# Faster debug builds while still optimizing dependencies (macroquad/miniquad)
+# so the window + rendering feel responsive even in `cargo run`.
+[profile.dev.package."*"]
+opt-level = 3
+
+# Size-tuned release profile for the wasm build that ships to the website.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
