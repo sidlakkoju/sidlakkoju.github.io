@@ -48,7 +48,13 @@ const name = "Sid Lakkoju";
 				height: 100vh;
 				display: block;
 				z-index: 0;
-				pointer-events: none;
+				/* Canvas catches clicks so the macroquad sim can handle its
+				   own UI (pause button, drag handles). `main` below has
+				   pointer-events: none so the overlaid text doesn't block. */
+				pointer-events: auto;
+				/* Disable native touch gestures so drag interactions aren't
+				   hijacked by the browser's scroll/pinch on mobile. */
+				touch-action: none;
 			}
 
 			main {

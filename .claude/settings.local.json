@@ -10,7 +10,9 @@
       "Bash(cargo build:*)",
       "Bash(ls:*)",
       "Bash(find:*)",
-      "Bash(curl -s http://localhost:4321/)"
+      "Bash(curl -s http://localhost:4321/)",
+      "Bash(curl -s -o /dev/null -w \"dev: %{http_code}\\\\n\" http://localhost:4321/)",
+      "Bash(curl -s -o /dev/null -w \"wasm: %{http_code} %{size_download}\\\\n\" http://localhost:4321/sim/gravity_simulation.wasm)"
     ]
   }
 }
