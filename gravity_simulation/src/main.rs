@@ -24,6 +24,17 @@ const BTN_GAP: f32 = 12.0;
 const MINUS_BTN_RADIUS: f32 = 12.0;
 const MINUS_BTN_OFFSET: f32 = 18.0;
 
+// Mass stepper ([-] 10000 [+]) drawn below each body when paused.
+const BASE_MASS: f32 = 10000.0;
+const BASE_RADIUS: f32 = 30.0;
+const MASS_STEP: f32 = 100.0;
+const MASS_MIN: f32 = 100.0;
+const MASS_BTN_SIZE: f32 = 22.0;
+const MASS_BTN_GAP: f32 = 6.0;
+const MASS_LABEL_MIN_W: f32 = 58.0;
+const MASS_ROW_OFFSET: f32 = 16.0;
+const MASS_FONT_SIZE: u16 = 18;
+
 // Cycled through when the user adds bodies via the + button.
 const PALETTE: &[Color] = &[YELLOW, BLUE, RED, GREEN, PURPLE, ORANGE, PINK, SKYBLUE, LIME, GOLD];
 
@@ -183,6 +194,37 @@ fn plus_button_rect() -> Rect {
     )
 }
 
+/// Area-proportional size: r ∝ √mass, anchored so (BASE_MASS → BASE_RADIUS).
+fn radius_for_mass(mass: f32) -> f32 {
+    BASE_RADIUS * (mass / BASE_MASS).sqrt()
+}
+
+/// Layout for a body's mass stepper row: `[ − ] 10000 [ + ]`, centered
+/// horizontally below the body. Returns (minus_rect, label_rect, plus_rect).
+fn mass_row_rects(b: &Body) -> (Rect, Rect, Rect) {
+    let text = format!("{}", b.mass as i32);
+    let dim = measure_text(&text, None, MASS_FONT_SIZE, 1.0);
+    let label_w = dim.width.max(MASS_LABEL_MIN_W);
+    let row_w = MASS_BTN_SIZE * 2.0 + MASS_BTN_GAP * 2.0 + label_w;
+    let row_x = b.pos.x - row_w / 2.0;
+    let row_y = b.pos.y + b.radius + MASS_ROW_OFFSET;
+
+    let minus = Rect::new(row_x, row_y, MASS_BTN_SIZE, MASS_BTN_SIZE);
+    let label = Rect::new(
+        row_x + MASS_BTN_SIZE + MASS_BTN_GAP,
+        row_y,
+        label_w,
+        MASS_BTN_SIZE,
+    );
+    let plus = Rect::new(
+        row_x + row_w - MASS_BTN_SIZE,
+        row_y,
+        MASS_BTN_SIZE,
+        MASS_BTN_SIZE,
+    );
+    (minus, label, plus)
+}
+
 fn draw_button_rect(rect: Rect, hot: bool) {
     let fill = if hot {
         Color::new(1.0, 1.0, 1.0, 0.18)
@@ -220,6 +262,33 @@ fn draw_plus_glyph(rect: Rect) {
     let bar_thick = rect.w * 0.12;
     draw_rectangle(cx - bar_len / 2.0, cy - bar_thick / 2.0, bar_len, bar_thick, WHITE);
     draw_rectangle(cx - bar_thick / 2.0, cy - bar_len / 2.0, bar_thick, bar_len, WHITE);
+}
+
+fn draw_minus_glyph(rect: Rect) {
+    let cx = rect.x + rect.w / 2.0;
+    let cy = rect.y + rect.h / 2.0;
+    let bar_len = rect.w * 0.48;
+    let bar_thick = rect.w * 0.12;
+    draw_rectangle(cx - bar_len / 2.0, cy - bar_thick / 2.0, bar_len, bar_thick, WHITE);
+}
+
+fn draw_mass_stepper(body: &Body, mouse: Vec2) {
+    let (minus, label, plus) = mass_row_rects(body);
+
+    draw_button_rect(minus, hit_rect(minus, mouse));
+    draw_minus_glyph(minus);
+
+    draw_rectangle(label.x, label.y, label.w, label.h, Color::new(0.0, 0.0, 0.0, 0.55));
+    draw_rectangle_lines(label.x, label.y, label.w, label.h, 2.0, WHITE);
+
+    let text = format!("{}", body.mass as i32);
+    let dim = measure_text(&text, None, MASS_FONT_SIZE, 1.0);
+    let tx = label.x + (label.w - dim.width) / 2.0;
+    let ty = label.y + (label.h + dim.offset_y) / 2.0;
+    draw_text(&text, tx, ty, MASS_FONT_SIZE as f32, WHITE);
+
+    draw_button_rect(plus, hit_rect(plus, mouse));
+    draw_plus_glyph(plus);
 }
 
 fn draw_minus_button(center: Vec2, hot: bool) {
@@ -368,6 +437,19 @@ async fn main() {
                     .position(|b| hit_circle(minus_button_center(b), MINUS_BTN_RADIUS, mouse))
                 {
                     bodies.remove(i);
+                } else if let Some((i, delta)) = bodies.iter().enumerate().find_map(|(i, b)| {
+                    let (m, _, p) = mass_row_rects(b);
+                    if hit_rect(m, mouse) {
+                        Some((i, -MASS_STEP))
+                    } else if hit_rect(p, mouse) {
+                        Some((i, MASS_STEP))
+                    } else {
+                        None
+                    }
+                }) {
+                    let new_mass = (bodies[i].mass + delta).max(MASS_MIN);
+                    bodies[i].mass = new_mass;
+                    bodies[i].radius = radius_for_mass(new_mass);
                 } else if let Some(i) = bodies
                     .iter()
                     .position(|b| hit_circle(velocity_tip(b), TIP_HIT_RADIUS, mouse))
@@ -424,6 +506,9 @@ async fn main() {
         if ui.paused {
             for body in &bodies {
                 draw_velocity_arrow(body);
+            }
+            for body in &bodies {
+                draw_mass_stepper(body, mouse);
             }
             for body in &bodies {
                 let center = minus_button_center(body);
