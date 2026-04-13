@@ -1,8 +1,20 @@
 use macroquad::prelude::*;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 // Gravitational constant — not the real one (6.674e-11).
 // Tuned to make pixel-scale bodies behave visibly.
 const G: f32 = 1000.0;
+
+// Pause state shared between Rust (canvas button) and JS (DOM overlay button).
+// JS reads this via window.wasm_exports.set_paused after wasm instantiates.
+static PAUSED: AtomicI32 = AtomicI32::new(0);
+
+/// Exported to JS so the DOM-level pause overlay button can toggle physics.
+/// Also called by Rust's own canvas button handler for native builds.
+#[no_mangle]
+pub extern "C" fn set_paused(p: i32) {
+    PAUSED.store(p, Ordering::Relaxed);
+}
 
 // ---------------------------------------------------------------------------
 // UI CONSTANTS
@@ -69,7 +81,6 @@ enum Drag {
 }
 
 struct Ui {
-    paused: bool,
     drag: Drag,
 }
 
@@ -381,7 +392,7 @@ async fn main() {
         next_frame().await;
     }
     let mut bodies = initial_bodies(cx, cy);
-    let mut ui = Ui { paused: false, drag: Drag::None };
+    let mut ui = Ui { drag: Drag::None };
 
     // Run multiple physics steps per frame to reduce energy drift during
     // close encounters and collisions.
@@ -401,6 +412,10 @@ async fn main() {
             cy = new_cy;
         }
 
+        // Read pause state from the shared atomic so both the canvas button
+        // (Rust) and the DOM overlay button (JS) converge on the same value.
+        let paused = PAUSED.load(Ordering::Relaxed) != 0;
+
         // ----- Input -----
         let (mx, my) = mouse_position();
         let mouse = vec2(mx, my);
@@ -413,9 +428,10 @@ async fn main() {
 
         if pressed {
             if hit_rect(pause_rect, mouse) {
-                ui.paused = !ui.paused;
+                // Toggle via the shared atomic so JS stays in sync.
+                PAUSED.fetch_xor(1, Ordering::Relaxed);
                 ui.drag = Drag::None;
-            } else if ui.paused {
+            } else if paused {
                 // Click-dispatch order: UI buttons > minus buttons > velocity
                 // tips > bodies. Minus before vel-tip so removal beats
                 // accidental drag start when they visually overlap.
@@ -484,7 +500,7 @@ async fn main() {
         }
 
         // ----- Physics (skipped while paused) -----
-        if !ui.paused {
+        if !paused {
             // Clamp dt so a long pause (e.g. tab backgrounded) can't produce
             // one huge step that tunnels bodies through each other on resume.
             let frame_time = get_frame_time().min(1.0 / 30.0);
@@ -503,7 +519,7 @@ async fn main() {
             body.draw();
         }
 
-        if ui.paused {
+        if paused {
             for body in &bodies {
                 draw_velocity_arrow(body);
             }
@@ -519,7 +535,7 @@ async fn main() {
         }
 
         draw_button_rect(pause_rect, hit_rect(pause_rect, mouse));
-        if ui.paused {
+        if paused {
             draw_play_glyph(pause_rect);
         } else {
             draw_pause_glyph(pause_rect);

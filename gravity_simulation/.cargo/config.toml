@@ -1,0 +1,4 @@
+[target.wasm32-unknown-unknown]
+# Explicitly export set_paused so wasm-ld doesn't dead-code-strip it.
+# This allows JS (via window.wasm_exports.set_paused) to toggle physics pause.
+rustflags = ["-C", "link-arg=--export=set_paused"]

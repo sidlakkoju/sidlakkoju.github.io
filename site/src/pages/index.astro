@@ -18,6 +18,22 @@ const name = "Sid Lakkoju";
 			<p>Portfolio — coming soon</p>
 		</main>
 
+		<!-- Transparent overlay exactly covering the Rust-drawn pause button
+		     (BTN_MARGIN=16px, BTN_SIZE=48px). Sits above canvas so JS learns
+		     about pause clicks and can show/hide the info banner. -->
+		<button id="pause-overlay" aria-label="Toggle simulation pause"></button>
+
+		<!-- Info banner, hidden until sim is paused. -->
+		<aside id="sim-info" aria-live="polite">
+			<span>ⓘ</span>
+			<p>
+				The <strong>three-body problem</strong> has no general closed-form solution -
+				even tiny differences in starting conditions lead to wildly different orbits.
+				<br /><br />
+				i think this is super cool - you should watch the netflix show.
+			</p>
+		</aside>
+
 		<script is:inline src="/sim/mq_js_bundle.js"></script>
 		<script is:inline>
 			// macroquad's shim exposes `load(path)` once mq_js_bundle.js has run.
@@ -28,6 +44,19 @@ const name = "Sid Lakkoju";
 			} else {
 				document.getElementById("glcanvas").style.display = "none";
 			}
+
+			// Pause overlay: intercepts clicks above the canvas-drawn pause button.
+			// Calls into wasm (window.wasm_exports is set by mq_js_bundle.js after
+			// instantiation) and toggles the info banner.
+			const pauseOverlay = document.getElementById("pause-overlay");
+			const simInfo = document.getElementById("sim-info");
+			let simPaused = false;
+
+			pauseOverlay.addEventListener("click", () => {
+				simPaused = !simPaused;
+				window.wasm_exports?.set_paused(simPaused ? 1 : 0);
+				simInfo.classList.toggle("visible", simPaused);
+			});
 		</script>
 
 		<style is:global>
@@ -82,6 +111,60 @@ const name = "Sid Lakkoju";
 				font-size: clamp(0.9rem, 2vw, 1.1rem);
 				opacity: 0.7;
 				mix-blend-mode: difference;
+			}
+
+			/* Transparent overlay button, sits above canvas (z-index 2) at the
+			   exact position of the Rust-drawn pause button. */
+			#pause-overlay {
+				position: fixed;
+				top: 16px;
+				right: 16px;
+				width: 48px;
+				height: 48px;
+				background: transparent;
+				border: none;
+				cursor: pointer;
+				z-index: 2;
+				padding: 0;
+			}
+
+			/* Floating info island: hidden by default, fades + rises into view. */
+			#sim-info {
+				position: fixed;
+				bottom: 2rem;
+				left: 50%;
+				transform: translateX(-50%) translateY(1.5rem);
+				width: min(520px, calc(100vw - 3rem));
+				display: flex;
+				align-items: flex-start;
+				gap: 0.75rem;
+				padding: 1.1rem 1.4rem;
+				background: rgba(10, 10, 10, 0.82);
+				backdrop-filter: blur(12px);
+				-webkit-backdrop-filter: blur(12px);
+				border: 1px solid rgba(255, 255, 255, 0.12);
+				border-radius: 16px;
+				color: #fff;
+				font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+				line-height: 1.6;
+				opacity: 0;
+				transition: opacity 0.25s ease, transform 0.25s ease;
+				pointer-events: none;
+				z-index: 1;
+			}
+			#sim-info.visible {
+				opacity: 1;
+				transform: translateX(-50%) translateY(0);
+				pointer-events: auto;
+			}
+			#sim-info span {
+				font-size: 1.1rem;
+				flex-shrink: 0;
+				margin-top: 0.05rem;
+			}
+			#sim-info p {
+				margin: 0;
+				opacity: 0.9;
 			}
 		</style>
 	</body>
