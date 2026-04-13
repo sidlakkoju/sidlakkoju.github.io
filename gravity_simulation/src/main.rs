@@ -39,7 +39,7 @@ const MINUS_BTN_OFFSET: f32 = 18.0;
 // Mass stepper ([-] 10000 [+]) drawn below each body when paused.
 const BASE_MASS: f32 = 10000.0;
 const BASE_RADIUS: f32 = 30.0;
-const MASS_STEP: f32 = 100.0;
+const MASS_STEP: f32 = 1000.0;
 const MASS_MIN: f32 = 100.0;
 const MASS_BTN_SIZE: f32 = 22.0;
 const MASS_BTN_GAP: f32 = 6.0;
