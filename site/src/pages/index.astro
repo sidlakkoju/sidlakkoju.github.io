@@ -1,88 +1,187 @@
 ---
 const name = "Sid Lakkoju";
+const siteUrl = "https://sidlakkoju.github.io/";
+const title = `${name} — Engineer at SpaceX`;
+const description =
+	"Sid Lakkoju is an engineer at SpaceX. Personal site with links to Sid's YouTube, GitHub, and LinkedIn, plus an interactive three-body gravity simulation.";
+const ogImage = new URL("/og.png", siteUrl).href;
+
+const profiles = {
+	youtube: "https://www.youtube.com/@SidLakkoju",
+	github: "https://github.com/sidlakkoju",
+	linkedin: "https://www.linkedin.com/in/sidlakkoju/",
+};
+
+// One linked graph so search engines can tie the person, the site, and the
+// profile page together (and to the sameAs profiles for the knowledge panel).
+const structuredData = {
+	"@context": "https://schema.org",
+	"@graph": [
+		{
+			"@type": "Person",
+			"@id": `${siteUrl}#person`,
+			name,
+			givenName: "Sid",
+			familyName: "Lakkoju",
+			url: siteUrl,
+			jobTitle: "Engineer",
+			worksFor: {
+				"@type": "Organization",
+				name: "SpaceX",
+				url: "https://www.spacex.com/",
+				sameAs: "https://en.wikipedia.org/wiki/SpaceX",
+			},
+			sameAs: Object.values(profiles),
+		},
+		{
+			"@type": "WebSite",
+			"@id": `${siteUrl}#website`,
+			url: siteUrl,
+			name,
+			inLanguage: "en",
+			publisher: { "@id": `${siteUrl}#person` },
+		},
+		{
+			"@type": "ProfilePage",
+			"@id": `${siteUrl}#profilepage`,
+			url: siteUrl,
+			name: title,
+			description,
+			inLanguage: "en",
+			isPartOf: { "@id": `${siteUrl}#website` },
+			mainEntity: { "@id": `${siteUrl}#person` },
+			primaryImageOfPage: { "@type": "ImageObject", url: ogImage, width: 1200, height: 630 },
+		},
+	],
+};
 ---
 
+<!doctype html>
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="generator" content={Astro.generator} />
-		<title>{name}</title>
-		<meta name="description" content="Sid Lakkoju — engineer at SpaceX. Personal site, projects, and links." />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<title>{title}</title>
+		<meta name="description" content={description} />
 		<meta name="author" content={name} />
-		<link rel="canonical" href="https://sidlakkoju.github.io/" />
+		<meta name="robots" content="index, follow, max-image-preview:large" />
+		<link rel="canonical" href={siteUrl} />
+		<meta name="theme-color" content="#000000" />
+		<meta name="color-scheme" content="dark" />
+		<meta name="generator" content={Astro.generator} />
 
-		<meta property="og:title" content={name} />
-		<meta property="og:description" content="Engineer at SpaceX. Projects and writing." />
-		<meta property="og:url" content="https://sidlakkoju.github.io/" />
-		<meta property="og:type" content="website" />
-		<meta name="twitter:card" content="summary" />
-		<meta name="twitter:title" content={name} />
-		<meta name="twitter:description" content="Engineer at SpaceX. Projects and writing." />
+		<link rel="icon" href="/favicon.ico" sizes="32x32" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+		<link rel="sitemap" type="application/xml" href="/sitemap.xml" />
 
-		<script type="application/ld+json" set:html={JSON.stringify({
-			"@context": "https://schema.org",
-			"@type": "Person",
-			"name": "Sid Lakkoju",
-			"url": "https://sidlakkoju.github.io",
-			"sameAs": [
-				"https://github.com/sidlakkoju",
-				"https://www.linkedin.com/in/sidlakkoju/",
-				"https://www.youtube.com/@SidLakkoju"
-			],
-			"jobTitle": "Engineer",
-			"worksFor": { "@type": "Organization", "name": "SpaceX" }
-		})} />
+		{Object.values(profiles).map((href) => <link rel="me" href={href} />)}
+
+		<meta property="og:type" content="profile" />
+		<meta property="og:site_name" content={name} />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:url" content={siteUrl} />
+		<meta property="og:image" content={ogImage} />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta property="og:image:alt" content="Sid Lakkoju, with three orbiting planets" />
+		<meta property="profile:first_name" content="Sid" />
+		<meta property="profile:last_name" content="Lakkoju" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content={title} />
+		<meta name="twitter:description" content={description} />
+		<meta name="twitter:image" content={ogImage} />
+
+		<link rel="preload" href="/sim/gravity_simulation.wasm" as="fetch" type="application/wasm" crossorigin />
+
+		<script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
 	</head>
 	<body>
-		<canvas id="glcanvas" tabindex="1"></canvas>
+		<canvas id="glcanvas" tabindex="0" aria-label="Interactive three-body gravity simulation"></canvas>
 
 		<main>
 			<h1>{name}</h1>
 			<p>Nerd @SpaceX 🚀</p>
 
 			<nav class="social-links" aria-label="Social links">
-				<a href="https://www.youtube.com/@SidLakkoju" target="_blank" rel="noopener noreferrer" aria-label="YouTube">
-					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+				<a href={profiles.youtube} target="_blank" rel="me noopener noreferrer" aria-label="Sid Lakkoju on YouTube">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 						<path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
 					</svg>
 				</a>
-				<a href="https://github.com/sidlakkoju" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
-					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+				<a href={profiles.github} target="_blank" rel="me noopener noreferrer" aria-label="Sid Lakkoju on GitHub">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 						<path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
 					</svg>
 				</a>
-				<a href="https://www.linkedin.com/in/sidlakkoju/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
-					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+				<a href={profiles.linkedin} target="_blank" rel="me noopener noreferrer" aria-label="Sid Lakkoju on LinkedIn">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 						<path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
 					</svg>
 				</a>
 			</nav>
 		</main>
 
-		<!-- Transparent overlay exactly covering the Rust-drawn pause button
-		     (BTN_MARGIN=16px, BTN_SIZE=48px). Sits above canvas so JS learns
-		     about pause clicks and can show/hide the info banner. -->
-		<button id="pause-overlay" aria-label="Toggle simulation pause"></button>
+		<!-- Sim controls. These used to be drawn into the canvas; as HTML they
+		     can use real backdrop blur. The Rust side exposes the state they
+		     need through window.wasm_exports (see gravity_simulation/src/main.rs). -->
+		<div class="sim-ui">
+			<div class="sim-buttons">
+				<button id="add-btn" class="glass glass-btn" aria-label="Add planet" tabindex="-1">
+					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+				</button>
+				<button id="pause-btn" class="glass glass-btn" aria-label="Pause simulation" aria-pressed="false">
+					<svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5v11M15 6.5v11" /></svg>
+					<svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M8.5 6.6v10.8a1 1 0 0 0 1.52.85l8.5-5.4a1 1 0 0 0 0-1.7l-8.5-5.4a1 1 0 0 0-1.52.85Z" /></svg>
+				</button>
+			</div>
 
-		<!-- Info banner, hidden until sim is paused. -->
-		<aside id="sim-info" aria-live="polite">
-			<span>ⓘ</span>
-			<p>
-				The <strong>three-body problem</strong> has no general closed-form solution -
-				even tiny differences in starting conditions lead to wildly different orbits.
-				<br /><br />
-				<a href="https://en.wikipedia.org/wiki/Newton%27s_law_of_universal_gravitation">
-					Fg = G * (m1 * m2) / d^2
+			<div id="body-controls"></div>
+
+			<aside id="sim-info" class="glass" aria-live="polite">
+				<header>
+					<svg viewBox="0 0 24 24" aria-hidden="true">
+						<circle cx="12" cy="12" r="9.25" />
+						<path d="M12 11v5.5" />
+						<circle class="fill" cx="12" cy="7.75" r="1.1" />
+					</svg>
+					<h2>The three-body problem</h2>
+				</header>
+				<p>
+					There's no general closed-form solution — even tiny differences in starting
+					conditions lead to wildly different orbits.
+				</p>
+				<a class="formula" href="https://en.wikipedia.org/wiki/Newton%27s_law_of_universal_gravitation" target="_blank" rel="noopener noreferrer">
+					<span><var>F</var><sub>g</sub> = <var>G</var> · <var>m</var><sub>1</sub><var>m</var><sub>2</sub> / <var>d</var><sup>2</sup></span>
+					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16 16 8M9.5 8H16v6.5" /></svg>
 				</a>
-				<br /><br />
-				i think this is super cool - you should watch the netflix show.
-			</p>
-		</aside>
+				<p>i think this is super cool - you should watch the netflix show.</p>
+				<p class="hint">Drag a planet to move it. Drag its arrow to change its velocity.</p>
+			</aside>
+		</div>
+
+		<template id="body-ctl-template">
+			<button class="glass remove" data-action="remove" aria-label="Remove planet" tabindex="-1">
+				<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 7.5l9 9M16.5 7.5l-9 9" /></svg>
+			</button>
+			<div class="glass stepper">
+				<button data-action="lighter" aria-label="Decrease mass" tabindex="-1">
+					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12" /></svg>
+				</button>
+				<output aria-label="Mass"></output>
+				<button data-action="heavier" aria-label="Increase mass" tabindex="-1">
+					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>
+				</button>
+			</div>
+		</template>
 
 		<script is:inline src="/sim/mq_js_bundle.js"></script>
 		<script is:inline>
+		// Block-scoped so these names can't collide with mq_js_bundle.js's
+		// top-level globals (it already declares `canvas`, for one).
+		{
 			// macroquad's shim exposes `load(path)` once mq_js_bundle.js has run.
 			// Honor prefers-reduced-motion by skipping the sim entirely.
 			const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -92,41 +191,158 @@ const name = "Sid Lakkoju";
 				document.getElementById("glcanvas").style.display = "none";
 			}
 
-			// Pause overlay: intercepts clicks above the canvas-drawn pause button.
-			// Calls into wasm (window.wasm_exports is set by mq_js_bundle.js after
-			// instantiation) and toggles the info banner.
-			const pauseOverlay = document.getElementById("pause-overlay");
-			const simInfo = document.getElementById("sim-info");
-			let simPaused = false;
+			const root = document.documentElement;
+			const canvas = document.getElementById("glcanvas");
+			const pauseBtn = document.getElementById("pause-btn");
+			const addBtn = document.getElementById("add-btn");
+			const bodyControls = document.getElementById("body-controls");
+			const template = document.getElementById("body-ctl-template");
+			const massFormat = new Intl.NumberFormat("en-US");
 
-			pauseOverlay.addEventListener("click", () => {
-				simPaused = !simPaused;
-				window.wasm_exports?.set_paused(simPaused ? 1 : 0);
-				simInfo.classList.toggle("visible", simPaused);
+			// Pool of per-body controls; pool[i] always belongs to body i.
+			const pool = [];
+			let paused = false;
+			let unpausedAt = 0;
+
+			function makeControls(i) {
+				const frag = template.content.cloneNode(true);
+				const remove = frag.querySelector(".remove");
+				const stepper = frag.querySelector(".stepper");
+				remove.dataset.index = stepper.dataset.index = i;
+				bodyControls.append(frag);
+				return { remove, stepper, output: stepper.querySelector("output"), mass: -1, shown: true };
+			}
+
+			function setPaused(p) {
+				paused = p;
+				if (!p) unpausedAt = performance.now();
+				root.classList.toggle("paused", p);
+				pauseBtn.setAttribute("aria-pressed", String(p));
+				pauseBtn.setAttribute("aria-label", p ? "Resume simulation" : "Pause simulation");
+				addBtn.tabIndex = p ? 0 : -1;
+				for (const c of pool) {
+					for (const b of c.stepper.querySelectorAll("button")) b.tabIndex = p ? 0 : -1;
+					c.remove.tabIndex = p ? 0 : -1;
+				}
+			}
+
+			// Runs after macroquad's own rAF callback each frame (it's started
+			// once wasm is up, so it's queued behind the sim), which keeps the
+			// controls in lockstep with the bodies while dragging.
+			function sync() {
+				const ex = window.wasm_exports;
+				const p = ex.is_paused() !== 0;
+				if (p !== paused) setPaused(p);
+
+				// Keep tracking briefly after resuming so controls don't freeze
+				// in place while they fade out.
+				if (paused || performance.now() - unpausedAt < 300) {
+					const n = ex.body_count();
+					while (pool.length < n) pool.push(makeControls(pool.length));
+					for (let i = 0; i < pool.length; i++) {
+						const c = pool[i];
+						const shown = i < n;
+						if (shown !== c.shown) {
+							c.shown = shown;
+							c.remove.hidden = c.stepper.hidden = !shown;
+						}
+						if (!shown) continue;
+						const x = ex.body_x(i);
+						const y = ex.body_y(i);
+						const r = ex.body_radius(i);
+						// Remove button sits just off the body's upper-right edge,
+						// mass stepper is centered below it.
+						const o = r * 0.72 + 14;
+						c.remove.style.transform = `translate3d(${x + o}px, ${y - o}px, 0) translate(-50%, -50%)`;
+						c.stepper.style.transform = `translate3d(${x}px, ${y + r + 14}px, 0) translateX(-50%)`;
+						const mass = ex.body_mass(i);
+						if (mass !== c.mass) {
+							c.mass = mass;
+							c.output.textContent = massFormat.format(Math.round(mass));
+						}
+					}
+				}
+				requestAnimationFrame(sync);
+			}
+
+			function waitForSim() {
+				if (window.wasm_exports?.body_count) {
+					root.classList.add("sim-ready");
+					requestAnimationFrame(sync);
+				} else {
+					setTimeout(waitForSim, 50);
+				}
+			}
+			if (!reduce) waitForSim();
+
+			pauseBtn.addEventListener("click", () => {
+				window.wasm_exports?.set_paused(paused ? 0 : 1);
+				setPaused(!paused);
 			});
+			addBtn.addEventListener("click", () => window.wasm_exports?.add_body());
+
+			bodyControls.addEventListener("click", (e) => {
+				const btn = e.target.closest("[data-action]");
+				const ex = window.wasm_exports;
+				if (!btn || !ex) return;
+				const i = Number(btn.closest("[data-index]").dataset.index);
+				if (btn.dataset.action === "remove") ex.remove_body(i);
+				else ex.step_mass(i, btn.dataset.action === "heavier" ? 1 : -1);
+			});
+
+			// Clicking a control shouldn't steal focus from the canvas, or Space
+			// (pause) would start activating whichever button was clicked last.
+			document.querySelector(".sim-ui").addEventListener("mousedown", (e) => {
+				if (e.target.closest("button")) e.preventDefault();
+			});
+
+			// macroquad only listens for mouseup on the canvas, so a drag released
+			// over a control would never end. Let pointers fall through to the
+			// canvas for the duration of a drag.
+			canvas.addEventListener("pointerdown", () => root.classList.add("dragging"));
+			window.addEventListener("pointerup", () => root.classList.remove("dragging"));
+			window.addEventListener("pointercancel", () => root.classList.remove("dragging"));
+		}
 		</script>
 
 		<style is:global>
+			:root {
+				--ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+				--ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+				--glass-blur: blur(22px) saturate(170%);
+				--text-secondary: rgba(235, 235, 245, 0.62);
+				--safe-top: env(safe-area-inset-top, 0px);
+				--safe-right: env(safe-area-inset-right, 0px);
+				--safe-bottom: env(safe-area-inset-bottom, 0px);
+				--safe-left: env(safe-area-inset-left, 0px);
+			}
+
 			html, body {
 				margin: 0;
 				padding: 0;
 				height: 100%;
 				background: #000;
 				color: #fff;
-				font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+				font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+				-webkit-font-smoothing: antialiased;
+				-moz-osx-font-smoothing: grayscale;
+				-webkit-tap-highlight-color: transparent;
 				overflow: hidden;
 			}
 
 			#glcanvas {
 				position: fixed;
 				inset: 0;
-				width: 100vw;
-				height: 100vh;
+				width: 100%;
+				height: 100%;
 				display: block;
 				z-index: 0;
+				/* macroquad calls canvas.focus() on startup so it gets key events;
+				   without this the browser draws its focus ring around the page. */
+				outline: none;
 				/* Canvas catches clicks so the macroquad sim can handle its
-				   own UI (pause button, drag handles). `main` below has
-				   pointer-events: none so the overlaid text doesn't block. */
+				   own drag interactions. `main` below has pointer-events: none
+				   so the overlaid text doesn't block. */
 				pointer-events: auto;
 				/* Disable native touch gestures so drag interactions aren't
 				   hijacked by the browser's scroll/pinch on mobile. */
@@ -137,6 +353,9 @@ const name = "Sid Lakkoju";
 				position: relative;
 				z-index: 1;
 				min-height: 100vh;
+				min-height: 100dvh;
+				padding: 0 24px;
+				box-sizing: border-box;
 				display: flex;
 				flex-direction: column;
 				align-items: center;
@@ -145,17 +364,18 @@ const name = "Sid Lakkoju";
 				pointer-events: none;
 			}
 
-			h1 {
+			main h1 {
 				margin: 0;
+				font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
 				font-size: clamp(2.5rem, 8vw, 6rem);
 				font-weight: 600;
-				letter-spacing: -0.02em;
+				letter-spacing: -0.03em;
 				mix-blend-mode: difference;
 			}
 
-			p {
+			main p {
 				margin: 0.5rem 0 0;
-				font-size: clamp(0.9rem, 2vw, 1.1rem);
+				font-size: clamp(0.95rem, 2vw, 1.1rem);
 				opacity: 0.7;
 				mix-blend-mode: difference;
 			}
@@ -171,14 +391,15 @@ const name = "Sid Lakkoju";
 				display: flex;
 				color: #fff;
 				opacity: 0.8;
-				transition: transform 0.2s ease, opacity 0.2s ease;
+				border-radius: 6px;
+				transition: transform 0.4s var(--ease-spring), opacity 0.2s ease;
 				/* Re-enable clicks; parent <main> sets pointer-events: none
 				   so canvas drags can pass through to the sim. */
 				pointer-events: auto;
 			}
 
 			.social-links a:hover {
-				transform: scale(1.25);
+				transform: scale(1.18);
 				opacity: 1;
 			}
 
@@ -187,69 +408,369 @@ const name = "Sid Lakkoju";
 				height: 2rem;
 			}
 
-			/* Transparent overlay button, sits above canvas (z-index 2) at the
-			   exact position of the Rust-drawn pause button. */
-			#pause-overlay {
-				position: fixed;
-				top: 16px;
-				right: 16px;
-				width: 48px;
-				height: 48px;
-				background: transparent;
-				border: none;
-				cursor: pointer;
-				z-index: 2;
-				padding: 0;
+			/* ------------------------------------------------------------------
+			   Glass material. Layers, back to front:
+			   - backdrop blur + saturation boost (the planets glow through)
+			   - a faint white tint that's brighter at the top, like light
+			     falling on a lens
+			   - a gradient hairline rim (::before) that catches light on the
+			     top-left and bottom-right edges
+			   - a crisp inner top highlight and a soft drop shadow
+			   Only opacity and transform are ever animated, so it stays on the
+			   compositor.
+			   ------------------------------------------------------------------ */
+			.glass {
+				position: relative;
+				isolation: isolate;
+				color: #fff;
+				background:
+					radial-gradient(120% 90% at 50% -10%, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0) 60%),
+					linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.025)),
+					rgba(22, 22, 26, 0.38);
+				-webkit-backdrop-filter: var(--glass-blur);
+				backdrop-filter: var(--glass-blur);
+				box-shadow:
+					inset 0 1px 0.5px rgba(255, 255, 255, 0.22),
+					inset 0 -1px 1px rgba(255, 255, 255, 0.04),
+					0 1px 2px rgba(0, 0, 0, 0.3),
+					0 12px 32px -8px rgba(0, 0, 0, 0.6);
+			}
+			.glass::before {
+				content: "";
+				position: absolute;
+				inset: 0;
+				z-index: -1;
+				border-radius: inherit;
+				padding: 1px;
+				background: linear-gradient(
+					145deg,
+					rgba(255, 255, 255, 0.5) 0%,
+					rgba(255, 255, 255, 0.12) 22%,
+					rgba(255, 255, 255, 0.04) 50%,
+					rgba(255, 255, 255, 0.1) 78%,
+					rgba(255, 255, 255, 0.32) 100%
+				);
+				-webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+				-webkit-mask-composite: xor;
+				mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+				pointer-events: none;
+			}
+			@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+				.glass { background-color: rgba(30, 30, 34, 0.92); }
 			}
 
-			/* Floating info island: hidden by default, fades + rises into view. */
-			#sim-info {
-				position: fixed;
-				bottom: 2rem;
-				left: 50%;
-				transform: translateX(-50%) translateY(1.5rem);
-				width: min(520px, calc(100vw - 3rem));
-				display: flex;
-				align-items: flex-start;
-				gap: 0.75rem;
-				padding: 1.1rem 1.4rem;
-				background: rgba(10, 10, 10, 0.82);
-				backdrop-filter: blur(12px);
-				-webkit-backdrop-filter: blur(12px);
-				border: 1px solid rgba(255, 255, 255, 0.12);
-				border-radius: 16px;
-				color: #fff;
-				font-size: clamp(0.8rem, 1.5vw, 0.9rem);
-				line-height: 1.6;
-				opacity: 0;
-				transition: opacity 0.25s ease, transform 0.25s ease;
-				pointer-events: none;
-				z-index: 1;
+			.glass svg,
+			#sim-info svg {
+				fill: none;
+				stroke: currentColor;
+				stroke-width: 2;
+				stroke-linecap: round;
+				stroke-linejoin: round;
 			}
-			#sim-info.visible {
+			.glass svg .fill,
+			#sim-info svg .fill {
+				fill: currentColor;
+				stroke: none;
+			}
+
+			.glass button,
+			button.glass {
+				font: inherit;
+				border: 0;
+				padding: 0;
+				cursor: pointer;
+				-webkit-user-select: none;
+				user-select: none;
+				touch-action: manipulation;
+			}
+			.glass-btn:focus-visible,
+			.glass button:focus-visible,
+			.remove:focus-visible,
+			#sim-info a:focus-visible,
+			.social-links a:focus-visible {
+				outline: 2px solid rgba(255, 255, 255, 0.85);
+				outline-offset: 3px;
+			}
+
+			/* Everything sim-related stays hidden until the wasm is running (and
+			   forever under prefers-reduced-motion, where the sim never loads). */
+			.sim-ui {
+				display: none;
+			}
+			.sim-ready .sim-ui {
+				display: block;
+			}
+			.dragging .sim-ui * {
+				pointer-events: none !important;
+			}
+
+			/* ---- Pause / add buttons ---- */
+			.sim-buttons {
+				position: fixed;
+				top: max(16px, var(--safe-top));
+				right: max(16px, var(--safe-right));
+				z-index: 4;
+				display: flex;
+				gap: 10px;
+				animation: rise-in 0.7s var(--ease-out) both;
+			}
+			.glass-btn {
+				display: grid;
+				place-items: center;
+				width: 44px;
+				height: 44px;
+				border-radius: 50%;
+				transition:
+					transform 0.45s var(--ease-spring),
+					opacity 0.3s ease,
+					background-color 0.2s ease;
+			}
+			.glass-btn svg {
+				grid-area: 1 / 1;
+				width: 20px;
+				height: 20px;
+				transition: transform 0.4s var(--ease-spring), opacity 0.2s ease;
+			}
+			.glass-btn:hover {
+				background-color: rgba(60, 60, 68, 0.45);
+			}
+			.glass-btn:active {
+				transform: scale(0.9);
+			}
+
+			.icon-play {
+				opacity: 0;
+				transform: scale(0.6);
+			}
+			.paused .icon-play {
 				opacity: 1;
-				transform: translateX(-50%) translateY(0);
+				transform: none;
+			}
+			.paused .icon-pause {
+				opacity: 0;
+				transform: scale(0.6);
+			}
+
+			#add-btn {
+				opacity: 0;
+				transform: translateX(22px) scale(0.6);
+				pointer-events: none;
+			}
+			.paused #add-btn {
+				opacity: 1;
+				transform: none;
 				pointer-events: auto;
 			}
-			#sim-info span {
-				font-size: 1.1rem;
+			.paused #add-btn:active {
+				transform: scale(0.9);
+			}
+
+			/* ---- Per-body controls (positioned every frame from JS) ----
+			   Above the info card so a planet parked behind it stays editable. */
+			#body-controls > * {
+				position: fixed;
+				top: 0;
+				left: 0;
+				z-index: 3;
+				will-change: transform;
+				opacity: 0;
+				visibility: hidden;
+				transition: opacity 0.22s ease, visibility 0s linear 0.22s;
+			}
+			.paused #body-controls > * {
+				opacity: 1;
+				visibility: visible;
+				transition: opacity 0.3s ease 0.05s, visibility 0s;
+			}
+			#body-controls > [hidden] {
+				display: none;
+			}
+
+			.remove {
+				display: grid;
+				place-items: center;
+				width: 26px;
+				height: 26px;
+				border-radius: 50%;
+				transition: background-color 0.2s ease;
+			}
+			/* Bigger invisible hit area for fingers. */
+			.remove::after {
+				content: "";
+				position: absolute;
+				inset: -9px;
+				border-radius: 50%;
+			}
+			.remove svg {
+				width: 14px;
+				height: 14px;
+				stroke-width: 2.4;
+				transition: transform 0.4s var(--ease-spring);
+			}
+			.remove:hover {
+				background-color: rgba(255, 69, 58, 0.55);
+			}
+			.remove:active svg {
+				transform: scale(0.8);
+			}
+
+			.stepper {
+				display: flex;
+				align-items: center;
+				height: 32px;
+				padding: 0 2px;
+				border-radius: 16px;
+			}
+			.stepper button {
+				display: grid;
+				place-items: center;
+				width: 28px;
+				height: 28px;
+				border-radius: 50%;
+				background: transparent;
+				color: inherit;
+				transition: background-color 0.2s ease, transform 0.35s var(--ease-spring);
+			}
+			.stepper button svg {
+				width: 14px;
+				height: 14px;
+				stroke-width: 2.2;
+			}
+			.stepper button:hover {
+				background: rgba(255, 255, 255, 0.12);
+			}
+			.stepper button:active {
+				transform: scale(0.86);
+				background: rgba(255, 255, 255, 0.2);
+			}
+			.stepper output {
+				min-width: 52px;
+				padding: 0 2px;
+				text-align: center;
+				font-size: 13px;
+				font-weight: 590;
+				letter-spacing: -0.01em;
+				font-variant-numeric: tabular-nums;
+			}
+
+			/* ---- Info card ---- */
+			#sim-info {
+				position: fixed;
+				z-index: 2;
+				left: max(12px, var(--safe-left));
+				right: max(12px, var(--safe-right));
+				bottom: max(12px, calc(var(--safe-bottom) + 4px));
+				box-sizing: border-box;
+				max-width: 420px;
+				margin: 0 auto;
+				padding: 18px 20px 16px;
+				border-radius: 26px;
+				font-size: 15px;
+				line-height: 1.45;
+				letter-spacing: -0.01em;
+				opacity: 0;
+				visibility: hidden;
+				transform: translateY(16px) scale(0.97);
+				transform-origin: 50% 100%;
+				transition:
+					opacity 0.25s ease,
+					transform 0.35s var(--ease-out),
+					visibility 0s linear 0.35s;
+			}
+			.paused #sim-info {
+				opacity: 1;
+				visibility: visible;
+				transform: none;
+				transition:
+					opacity 0.35s ease,
+					transform 0.6s var(--ease-spring),
+					visibility 0s;
+			}
+			#sim-info header {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				margin-bottom: 6px;
+			}
+			#sim-info header svg {
+				width: 20px;
+				height: 20px;
 				flex-shrink: 0;
-				margin-top: 0.05rem;
+				stroke-width: 1.7;
+				color: rgba(255, 255, 255, 0.75);
+			}
+			#sim-info h2 {
+				margin: 0;
+				font-size: 17px;
+				font-weight: 600;
+				letter-spacing: -0.02em;
 			}
 			#sim-info p {
 				margin: 0;
-				opacity: 0.9;
+				color: var(--text-secondary);
+				text-wrap: pretty;
 			}
-			#sim-info a {
-				color: rgba(255, 255, 255, 0.85);
-				text-decoration: underline;
-				text-decoration-color: rgba(255, 255, 255, 0.35);
-				text-underline-offset: 2px;
-				transition: color 0.2s ease, text-decoration-color 0.2s ease;
+			#sim-info p + p,
+			#sim-info .formula + p {
+				margin-top: 10px;
 			}
-			#sim-info a:hover {
+			#sim-info .hint {
+				margin-top: 12px;
+				padding-top: 12px;
+				border-top: 0.5px solid rgba(255, 255, 255, 0.14);
+				font-size: 13px;
+				color: rgba(235, 235, 245, 0.45);
+			}
+
+			.formula {
+				display: inline-flex;
+				align-items: center;
+				gap: 8px;
+				margin-top: 12px;
+				padding: 7px 10px 7px 12px;
+				border-radius: 12px;
+				background: rgba(255, 255, 255, 0.07);
+				box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
 				color: #fff;
-				text-decoration-color: rgba(255, 255, 255, 0.7);
+				text-decoration: none;
+				font-family: "New York", ui-serif, "Iowan Old Style", Georgia, serif;
+				font-size: 16px;
+				letter-spacing: 0;
+				transition: background-color 0.2s ease, transform 0.35s var(--ease-spring);
+			}
+			.formula var {
+				font-style: italic;
+			}
+			.formula sub,
+			.formula sup {
+				font-size: 0.68em;
+				line-height: 0;
+			}
+			.formula svg {
+				width: 14px;
+				height: 14px;
+				color: rgba(255, 255, 255, 0.55);
+			}
+			.formula:hover {
+				background: rgba(255, 255, 255, 0.12);
+			}
+			.formula:active {
+				transform: scale(0.97);
+			}
+
+			@keyframes rise-in {
+				from {
+					opacity: 0;
+					transform: translateY(-6px) scale(0.96);
+				}
+			}
+
+			@media (prefers-reduced-transparency: reduce) {
+				.glass {
+					-webkit-backdrop-filter: none;
+					backdrop-filter: none;
+					background-color: rgba(30, 30, 34, 0.96);
+				}
 			}
 		</style>
 	</body>

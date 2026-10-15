@@ -1,4 +1,5 @@
 use macroquad::prelude::*;
+use std::cell::RefCell;
 use std::sync::atomic::{AtomicI32, Ordering};
 
 // Gravitational constant — not the real one (6.674e-11).
@@ -9,11 +10,79 @@ const G: f32 = 1000.0;
 // JS reads this via window.wasm_exports.set_paused after wasm instantiates.
 static PAUSED: AtomicI32 = AtomicI32::new(0);
 
-/// Exported to JS so the DOM-level pause overlay button can toggle physics.
-/// Also called by Rust's own canvas button handler for native builds.
+/// Exported to JS so the DOM-level pause button can toggle physics.
 #[no_mangle]
 pub extern "C" fn set_paused(p: i32) {
     PAUSED.store(p, Ordering::Relaxed);
+}
+
+#[no_mangle]
+pub extern "C" fn is_paused() -> i32 {
+    PAUSED.load(Ordering::Relaxed)
+}
+
+// On the web the pause / add / remove / mass controls are HTML elements
+// layered over the canvas (so they can use real backdrop blur). The canvas
+// versions are only drawn and hit-tested in native builds.
+const CANVAS_UI: bool = cfg!(not(target_arch = "wasm32"));
+
+// Simulation state lives in a thread-local so the exported functions below can
+// read and edit it between frames. wasm is single-threaded and the main loop
+// never holds the borrow across `next_frame().await`, so this can't conflict.
+thread_local! {
+    static WORLD: RefCell<World> = RefCell::new(World {
+        bodies: Vec::new(),
+        cx: 0.0,
+        cy: 0.0,
+        drag: Drag::None,
+    });
+}
+
+// Body getters used by JS to position the per-body HTML controls each frame.
+// Out-of-range indices return 0 rather than trapping.
+fn with_body(i: i32, f: impl FnOnce(&Body) -> f32) -> f32 {
+    WORLD.with_borrow(|w| w.bodies.get(i as usize).map(f).unwrap_or(0.0))
+}
+
+#[no_mangle]
+pub extern "C" fn body_count() -> i32 {
+    WORLD.with_borrow(|w| w.bodies.len() as i32)
+}
+
+#[no_mangle]
+pub extern "C" fn body_x(i: i32) -> f32 {
+    with_body(i, |b| b.pos.x)
+}
+
+#[no_mangle]
+pub extern "C" fn body_y(i: i32) -> f32 {
+    with_body(i, |b| b.pos.y)
+}
+
+#[no_mangle]
+pub extern "C" fn body_radius(i: i32) -> f32 {
+    with_body(i, |b| b.radius)
+}
+
+#[no_mangle]
+pub extern "C" fn body_mass(i: i32) -> f32 {
+    with_body(i, |b| b.mass)
+}
+
+#[no_mangle]
+pub extern "C" fn add_body() {
+    WORLD.with_borrow_mut(|w| w.add_body());
+}
+
+#[no_mangle]
+pub extern "C" fn remove_body(i: i32) {
+    WORLD.with_borrow_mut(|w| w.remove_body(i as usize));
+}
+
+/// `dir` is +1 or -1: one MASS_STEP up or down.
+#[no_mangle]
+pub extern "C" fn step_mass(i: i32, dir: i32) {
+    WORLD.with_borrow_mut(|w| w.step_mass(i as usize, dir.signum() as f32 * MASS_STEP));
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +147,10 @@ impl Body {
     }
 
     fn draw(&self) {
-        draw_circle(self.pos.x, self.pos.y, self.radius, self.color);
+        // draw_circle uses a fixed 20-gon, which looks faceted on large or
+        // high-DPI bodies. Scale the segment count with the radius instead.
+        let sides = (self.radius * 1.5).clamp(32.0, 128.0) as u8;
+        draw_poly(self.pos.x, self.pos.y, sides, self.radius, 0.0, self.color);
     }
 }
 
@@ -92,8 +164,43 @@ enum Drag {
     VelTip { idx: usize },
 }
 
-struct Ui {
+struct World {
+    bodies: Vec<Body>,
+    // Canvas center; tracked so bodies can be re-centered on resize.
+    cx: f32,
+    cy: f32,
     drag: Drag,
+}
+
+impl World {
+    fn add_body(&mut self) {
+        let jitter = vec2(
+            rand::gen_range(-100.0, 100.0),
+            rand::gen_range(-100.0, 100.0),
+        );
+        let color = PALETTE[self.bodies.len() % PALETTE.len()];
+        self.bodies.push(Body::new(
+            vec2(self.cx, self.cy) + jitter,
+            Vec2::ZERO,
+            BASE_MASS,
+            BASE_RADIUS,
+            color,
+        ));
+    }
+
+    fn remove_body(&mut self, i: usize) {
+        if i < self.bodies.len() {
+            self.bodies.remove(i);
+            self.drag = Drag::None;
+        }
+    }
+
+    fn step_mass(&mut self, i: usize, delta: f32) {
+        if let Some(b) = self.bodies.get_mut(i) {
+            b.mass = (b.mass + delta).max(MASS_MIN);
+            b.radius = radius_for_mass(b.mass);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -336,24 +443,30 @@ fn draw_minus_button(center: Vec2, hot: bool) {
 fn draw_velocity_arrow(body: &Body) {
     let tip = velocity_tip(body);
     let delta = tip - body.pos;
+    let line = Color::new(1.0, 1.0, 1.0, 0.85);
+    let handle_fill = Color::new(1.0, 1.0, 1.0, 0.14);
+    let handle_ring = Color::new(1.0, 1.0, 1.0, 0.9);
 
     // If velocity is effectively zero, just draw the grab handle on top of
     // the body so the user can still pick it up to start dragging velocity.
     if delta.length_squared() < 4.0 {
-        draw_circle_lines(body.pos.x, body.pos.y, TIP_HIT_RADIUS, 2.0, WHITE);
+        draw_poly(body.pos.x, body.pos.y, 48, TIP_HIT_RADIUS, 0.0, handle_fill);
+        draw_poly_lines(body.pos.x, body.pos.y, 48, TIP_HIT_RADIUS, 0.0, 1.5, handle_ring);
         return;
     }
 
-    draw_line(body.pos.x, body.pos.y, tip.x, tip.y, 2.5, WHITE);
-
     let dir = delta.normalize();
     let perp = vec2(-dir.y, dir.x);
-    let head_len = 12.0;
-    let head_w = 7.0;
+    let head_len = 11.0;
+    let head_w = 6.0;
+    // Stop the shaft at the arrowhead base so the translucent line and head
+    // don't overlap into a brighter seam.
     let base = tip - dir * head_len;
-    draw_triangle(tip, base + perp * head_w, base - perp * head_w, WHITE);
+    draw_line(body.pos.x, body.pos.y, base.x, base.y, 2.0, line);
+    draw_triangle(tip, base + perp * head_w, base - perp * head_w, line);
 
-    draw_circle_lines(tip.x, tip.y, TIP_HIT_RADIUS, 2.0, WHITE);
+    draw_poly(tip.x, tip.y, 48, TIP_HIT_RADIUS, 0.0, handle_fill);
+    draw_poly_lines(tip.x, tip.y, 48, TIP_HIT_RADIUS, 0.0, 1.5, handle_ring);
 }
 
 // ---------------------------------------------------------------------------
@@ -373,7 +486,7 @@ fn initial_bodies(cx: f32, cy: f32) -> Vec<Body> {
         let angle = start_angle + i as f32 * angle_step;
         let pos = vec2(cx + spread * angle.cos(), cy - spread * angle.sin());
         let vel = vec2(-angle.sin(), -angle.cos()) * speed;
-        Body::new(pos, vel, 10000.0, 30.0, PALETTE[i % PALETTE.len()])
+        Body::new(pos, vel, BASE_MASS, BASE_RADIUS, PALETTE[i % PALETTE.len()])
     }).collect()
 }
 
@@ -383,89 +496,59 @@ fn window_conf() -> Conf {
         window_width: 1280,
         window_height: 800,
         high_dpi: true,
+        sample_count: 4,
         ..Default::default()
     }
 }
 
-#[macroquad::main(window_conf)]
-async fn main() {
-    // Defer initialization until macroquad reports a real viewport size.
-    // On web the canvas can report 0×0 for a frame or two after launch.
-    let mut cx;
-    let mut cy;
-    loop {
-        let w = screen_width();
-        let h = screen_height();
-        if w > 1.0 && h > 1.0 {
-            cx = w / 2.0;
-            cy = h / 2.0;
-            break;
+// Run multiple physics steps per frame to reduce energy drift during
+// close encounters and collisions.
+const SUBSTEPS: u32 = 8;
+
+/// One frame of input, physics, and rendering.
+fn frame(w: &mut World) {
+    // If the canvas resized, translate every body by the delta between
+    // the old and new center so the system stays visually centered.
+    let new_cx = screen_width() / 2.0;
+    let new_cy = screen_height() / 2.0;
+    if (new_cx - w.cx).abs() > 0.5 || (new_cy - w.cy).abs() > 0.5 {
+        let shift = vec2(new_cx - w.cx, new_cy - w.cy);
+        for body in &mut w.bodies {
+            body.pos += shift;
         }
-        next_frame().await;
+        w.cx = new_cx;
+        w.cy = new_cy;
     }
-    let mut bodies = initial_bodies(cx, cy);
-    let mut ui = Ui { drag: Drag::None };
 
-    // Run multiple physics steps per frame to reduce energy drift during
-    // close encounters and collisions.
-    const SUBSTEPS: u32 = 8;
+    // Space toggles pause. JS reads the shared atomic each frame, so the
+    // HTML controls follow along.
+    if is_key_pressed(KeyCode::Space) {
+        PAUSED.fetch_xor(1, Ordering::Relaxed);
+        w.drag = Drag::None;
+    }
 
-    loop {
-        // If the canvas resized, translate every body by the delta between
-        // the old and new center so the system stays visually centered.
-        let new_cx = screen_width() / 2.0;
-        let new_cy = screen_height() / 2.0;
-        if (new_cx - cx).abs() > 0.5 || (new_cy - cy).abs() > 0.5 {
-            let shift = vec2(new_cx - cx, new_cy - cy);
-            for body in &mut bodies {
-                body.pos += shift;
-            }
-            cx = new_cx;
-            cy = new_cy;
-        }
+    let paused = PAUSED.load(Ordering::Relaxed) != 0;
 
-        // Read pause state from the shared atomic so both the canvas button
-        // (Rust) and the DOM overlay button (JS) converge on the same value.
-        let paused = PAUSED.load(Ordering::Relaxed) != 0;
+    // ----- Input -----
+    let (mx, my) = mouse_position();
+    let mouse = vec2(mx, my);
+    let pressed = is_mouse_button_pressed(MouseButton::Left);
+    let down = is_mouse_button_down(MouseButton::Left);
+    let released = is_mouse_button_released(MouseButton::Left);
 
-        // ----- Input -----
-        let (mx, my) = mouse_position();
-        let mouse = vec2(mx, my);
-        let pressed = is_mouse_button_pressed(MouseButton::Left);
-        let down = is_mouse_button_down(MouseButton::Left);
-        let released = is_mouse_button_released(MouseButton::Left);
+    let pause_rect = pause_button_rect();
+    let plus_rect = plus_button_rect();
 
-        let pause_rect = pause_button_rect();
-        let plus_rect = plus_button_rect();
-
-        if pressed {
-            if hit_rect(pause_rect, mouse) {
-                // Toggle via the shared atomic so JS stays in sync.
-                PAUSED.fetch_xor(1, Ordering::Relaxed);
-                ui.drag = Drag::None;
-            } else if paused {
-                // Click-dispatch order: UI buttons > minus buttons > velocity
-                // tips > bodies. Minus before vel-tip so removal beats
-                // accidental drag start when they visually overlap.
-                if hit_rect(plus_rect, mouse) {
-                    let jitter = vec2(
-                        rand::gen_range(-100.0, 100.0),
-                        rand::gen_range(-100.0, 100.0),
-                    );
-                    let color = PALETTE[bodies.len() % PALETTE.len()];
-                    bodies.push(Body::new(
-                        vec2(cx, cy) + jitter,
-                        Vec2::ZERO,
-                        10000.0,
-                        30.0,
-                        color,
-                    ));
-                } else if let Some(i) = bodies
-                    .iter()
-                    .position(|b| hit_circle(minus_button_center(b), MINUS_BTN_RADIUS, mouse))
-                {
-                    bodies.remove(i);
-                } else if let Some((i, delta)) = bodies.iter().enumerate().find_map(|(i, b)| {
+    if pressed {
+        if CANVAS_UI && hit_rect(pause_rect, mouse) {
+            PAUSED.fetch_xor(1, Ordering::Relaxed);
+            w.drag = Drag::None;
+        } else if paused {
+            // Click-dispatch order: UI buttons > minus buttons > velocity
+            // tips > bodies. Minus before vel-tip so removal beats
+            // accidental drag start when they visually overlap.
+            let mass_hit = || {
+                w.bodies.iter().enumerate().find_map(|(i, b)| {
                     let (m, _, p) = mass_row_rects(b);
                     if hit_rect(m, mouse) {
                         Some((i, -MASS_STEP))
@@ -474,71 +557,84 @@ async fn main() {
                     } else {
                         None
                     }
-                }) {
-                    let new_mass = (bodies[i].mass + delta).max(MASS_MIN);
-                    bodies[i].mass = new_mass;
-                    bodies[i].radius = radius_for_mass(new_mass);
-                } else if let Some(i) = bodies
-                    .iter()
-                    .position(|b| hit_circle(velocity_tip(b), TIP_HIT_RADIUS, mouse))
-                {
-                    ui.drag = Drag::VelTip { idx: i };
-                } else if let Some(i) = bodies
-                    .iter()
-                    .position(|b| hit_circle(b.pos, b.radius, mouse))
-                {
-                    ui.drag = Drag::Body {
-                        idx: i,
-                        offset: mouse - bodies[i].pos,
-                    };
-                }
+                })
+            };
+
+            if CANVAS_UI && hit_rect(plus_rect, mouse) {
+                w.add_body();
+            } else if let Some(i) = w.bodies.iter().position(|b| {
+                CANVAS_UI && hit_circle(minus_button_center(b), MINUS_BTN_RADIUS, mouse)
+            }) {
+                w.remove_body(i);
+            } else if let Some((i, delta)) = mass_hit().filter(|_| CANVAS_UI) {
+                w.step_mass(i, delta);
+            } else if let Some(i) = w
+                .bodies
+                .iter()
+                .position(|b| hit_circle(velocity_tip(b), TIP_HIT_RADIUS, mouse))
+            {
+                w.drag = Drag::VelTip { idx: i };
+            } else if let Some(i) = w
+                .bodies
+                .iter()
+                .position(|b| hit_circle(b.pos, b.radius, mouse))
+            {
+                w.drag = Drag::Body {
+                    idx: i,
+                    offset: mouse - w.bodies[i].pos,
+                };
             }
         }
+    }
 
-        if down {
-            match ui.drag {
-                Drag::Body { idx, offset } if idx < bodies.len() => {
-                    bodies[idx].pos = mouse - offset;
-                }
-                Drag::VelTip { idx } if idx < bodies.len() => {
-                    bodies[idx].vel = (mouse - bodies[idx].pos) / VEL_SCALE;
-                }
-                _ => {}
+    if down {
+        match w.drag {
+            Drag::Body { idx, offset } if idx < w.bodies.len() => {
+                w.bodies[idx].pos = mouse - offset;
             }
-        }
-
-        if released {
-            ui.drag = Drag::None;
-        }
-
-        // ----- Physics (skipped while paused) -----
-        if !paused {
-            // Clamp dt so a long pause (e.g. tab backgrounded) can't produce
-            // one huge step that tunnels bodies through each other on resume.
-            let frame_time = get_frame_time().min(1.0 / 30.0);
-            let dt = frame_time / SUBSTEPS as f32;
-
-            for _ in 0..SUBSTEPS {
-                let accels = compute_accelerations(&bodies);
-                integrate(&mut bodies, &accels, dt);
-                resolve_collisions(&mut bodies);
+            Drag::VelTip { idx } if idx < w.bodies.len() => {
+                w.bodies[idx].vel = (mouse - w.bodies[idx].pos) / VEL_SCALE;
             }
+            _ => {}
         }
+    }
 
-        // ----- Render -----
-        clear_background(BLACK);
-        for body in &bodies {
-            body.draw();
+    if released {
+        w.drag = Drag::None;
+    }
+
+    // ----- Physics (skipped while paused) -----
+    if !paused {
+        // Clamp dt so a long pause (e.g. tab backgrounded) can't produce
+        // one huge step that tunnels bodies through each other on resume.
+        let frame_time = get_frame_time().min(1.0 / 30.0);
+        let dt = frame_time / SUBSTEPS as f32;
+
+        for _ in 0..SUBSTEPS {
+            let accels = compute_accelerations(&w.bodies);
+            integrate(&mut w.bodies, &accels, dt);
+            resolve_collisions(&mut w.bodies);
         }
+    }
 
+    // ----- Render -----
+    clear_background(BLACK);
+    for body in &w.bodies {
+        body.draw();
+    }
+
+    if paused {
+        for body in &w.bodies {
+            draw_velocity_arrow(body);
+        }
+    }
+
+    if CANVAS_UI {
         if paused {
-            for body in &bodies {
-                draw_velocity_arrow(body);
-            }
-            for body in &bodies {
+            for body in &w.bodies {
                 draw_mass_stepper(body, mouse);
             }
-            for body in &bodies {
+            for body in &w.bodies {
                 let center = minus_button_center(body);
                 draw_minus_button(center, hit_circle(center, MINUS_BTN_RADIUS, mouse));
             }
@@ -552,7 +648,29 @@ async fn main() {
         } else {
             draw_pause_glyph(pause_rect);
         }
+    }
+}
 
+#[macroquad::main(window_conf)]
+async fn main() {
+    // Defer initialization until macroquad reports a real viewport size.
+    // On web the canvas can report 0×0 for a frame or two after launch.
+    loop {
+        let w = screen_width();
+        let h = screen_height();
+        if w > 1.0 && h > 1.0 {
+            WORLD.with_borrow_mut(|world| {
+                world.cx = w / 2.0;
+                world.cy = h / 2.0;
+                world.bodies = initial_bodies(world.cx, world.cy);
+            });
+            break;
+        }
+        next_frame().await;
+    }
+
+    loop {
+        WORLD.with_borrow_mut(frame);
         next_frame().await;
     }
 }

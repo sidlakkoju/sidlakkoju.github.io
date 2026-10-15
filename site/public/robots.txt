@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://sidlakkoju.github.io/sitemap.xml

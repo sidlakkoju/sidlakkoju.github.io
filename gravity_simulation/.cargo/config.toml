@@ -1,4 +1,16 @@
 [target.wasm32-unknown-unknown]
-# Explicitly export set_paused so wasm-ld doesn't dead-code-strip it.
-# This allows JS (via window.wasm_exports.set_paused) to toggle physics pause.
-rustflags = ["-C", "link-arg=--export=set_paused"]
+# Explicitly export the JS-facing functions so wasm-ld doesn't dead-code-strip
+# them. The page reads them via window.wasm_exports to drive the HTML controls
+# (pause, add/remove body, mass stepper) layered over the canvas.
+rustflags = [
+    "-C", "link-arg=--export=set_paused",
+    "-C", "link-arg=--export=is_paused",
+    "-C", "link-arg=--export=body_count",
+    "-C", "link-arg=--export=body_x",
+    "-C", "link-arg=--export=body_y",
+    "-C", "link-arg=--export=body_radius",
+    "-C", "link-arg=--export=body_mass",
+    "-C", "link-arg=--export=add_body",
+    "-C", "link-arg=--export=remove_body",
+    "-C", "link-arg=--export=step_mass",
+]
