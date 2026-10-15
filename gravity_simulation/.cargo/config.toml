@@ -2,7 +2,12 @@
 # Explicitly export the JS-facing functions so wasm-ld doesn't dead-code-strip
 # them. The page reads them via window.wasm_exports to drive the HTML controls
 # (pause, add/remove body, mass stepper) layered over the canvas.
+#
+# --allow-undefined lets macroquad's JS-provided functions (WebGL, input,
+# timing) link as wasm imports. Older rustc passed it implicitly; newer
+# toolchains don't, so it's spelled out here.
 rustflags = [
+    "-C", "link-arg=--allow-undefined",
     "-C", "link-arg=--export=set_paused",
     "-C", "link-arg=--export=is_paused",
     "-C", "link-arg=--export=body_count",
