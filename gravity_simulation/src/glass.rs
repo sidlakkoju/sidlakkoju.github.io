@@ -1,12 +1,16 @@
-//! Offscreen scene rendering plus a refractive "liquid glass" pass.
+//! Scene rendering, glass-bead planets, and the refractive "liquid glass" UI.
 //!
-//! The simulation (planets, hero text, arrows) is drawn into a multisampled
-//! render target. That texture is then drawn to the screen and every glass
-//! shape samples it through a curved-edge lens model, so light bends around
-//! the rim the way it does through real rounded glass. The browser can't do
-//! this with CSS (backdrop-filter only blurs, and Safari ignores SVG
-//! displacement filters there), which is why the glass lives in the renderer
-//! and the HTML on top only carries text and icons.
+//! Each frame the scene (planets, headline, icons, arrows) is drawn twice:
+//! once into a small 1x (CSS-pixel) render target, and once straight to the
+//! screen at full device resolution. The glass UI on top samples the small
+//! copy (and a blurred version of it) through a curved-edge lens model, so
+//! light bends around its rim the way it does through real rounded glass.
+//! Drawing straight to the screen avoids a full-resolution offscreen pass and
+//! copy, which is what dominates on 3x phone displays.
+//!
+//! The browser can't do this with CSS (backdrop-filter only blurs, and Safari
+//! ignores SVG displacement filters there), which is why the glass lives in
+//! the renderer and the HTML on top only carries text and icons.
 
 use macroquad::miniquad::{BlendFactor, BlendState, BlendValue, Equation};
 use macroquad::models::{Mesh, Vertex};
@@ -42,6 +46,23 @@ impl GlassStyle {
 
 const MAX_REFRACTION: f32 = 32.0;
 const MAX_LIFT: f32 = 0.25;
+
+/// A planet, drawn as a glass bead.
+#[derive(Clone, Copy)]
+pub struct Planet {
+    pub center: Vec2,
+    pub radius: f32,
+    pub color: Color,
+}
+
+/// What the scene pass draws.
+pub struct Scene<'a> {
+    pub planets: &'a [Planet],
+    /// Headline texture and where it goes (CSS px); drawn with difference blending.
+    pub hero: Option<(&'a Texture2D, Rect)>,
+    /// Icon atlas (square cells, left to right) and each icon's rect + opacity.
+    pub icons: Option<(&'a Texture2D, &'a [(Rect, f32)])>,
+}
 
 const VERTEX: &str = r#"#version 100
 attribute vec3 position;
@@ -161,6 +182,80 @@ void main() {
 }
 "#;
 
+// Planets are simple glass beads: their own color with soft shading, a thin
+// lit edge, and a faint inverted view of the headline/icons behind them
+// (sampled straight from those textures, so the planets don't depend on a
+// render of the scene they're part of).
+const PLANET_FRAGMENT: &str = r#"#version 100
+precision highp float;
+
+varying vec2 v_pos;    // CSS px
+varying vec4 v_color;  // tint
+varying vec4 v_shape;  // (center.xy, radius, unused)
+
+uniform sampler2D HeroTex;
+uniform sampler2D IconTex;
+uniform vec4 HeroRect;   // x, y, w, h (CSS px); w = 0 when absent
+uniform vec4 Icon0;
+uniform vec4 Icon1;
+uniform vec4 Icon2;
+uniform vec4 IconAlpha;  // per-icon opacity, w = atlas cell count
+uniform vec4 Params;     // x = device px per CSS px for this pass
+
+vec3 icon(vec4 rect, float index, float alpha, vec2 q) {
+    vec2 uv = (q - rect.xy) / rect.zw;
+    if (alpha <= 0.0 || uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return vec3(0.0);
+    vec4 t = texture2D(IconTex, vec2((index + uv.x) / IconAlpha.w, uv.y));
+    return t.rgb * t.a * alpha;
+}
+
+// What lies behind a point: the headline and the icons, on black.
+vec3 backdrop(vec2 q) {
+    vec3 c = vec3(0.0);
+    vec2 uv = (q - HeroRect.xy) / HeroRect.zw;
+    if (HeroRect.z > 0.0 && uv.x >= 0.0 && uv.y >= 0.0 && uv.x <= 1.0 && uv.y <= 1.0) {
+        vec4 t = texture2D(HeroTex, uv);
+        c += t.rgb * t.a;
+    }
+    if (IconAlpha.w > 0.0) {
+        c += icon(Icon0, 0.0, IconAlpha.x, q);
+        c += icon(Icon1, 1.0, IconAlpha.y, q);
+        c += icon(Icon2, 2.0, IconAlpha.z, q);
+    }
+    return c;
+}
+
+void main() {
+    vec2 center = v_shape.xy;
+    float r = v_shape.z;
+    vec2 d = v_pos - center;
+    float dist = length(d);
+    float coverage = clamp((r - dist) * Params.x + 0.5, 0.0, 1.0);
+    if (coverage <= 0.0) discard;
+
+    vec2 p = d / r;
+    float rho2 = min(dot(p, p), 1.0);
+    float rho = sqrt(rho2);
+    vec3 n = vec3(p, sqrt(1.0 - rho2));
+    vec3 tint = v_color.rgb;
+    vec3 L = normalize(vec3(-0.45, -0.62, 0.64));
+
+    // Mostly the planet's own color, with gentle shading for volume.
+    vec3 color = tint * mix(0.8, 1.04, dot(n, L) * 0.5 + 0.5);
+
+    // A faint, inverted view of what's behind, like looking through a bead.
+    color += backdrop(center - d * mix(0.5, 1.4, rho2 * rho)) * 0.2;
+
+    // Thin lit edge on the upper left and one soft highlight.
+    float toward = max(dot(p / max(rho, 1e-4), normalize(vec2(-0.6, -0.8))), 0.0);
+    float band = smoothstep(0.84, 0.92, rho) * (1.0 - smoothstep(0.95, 0.99, rho));
+    color = mix(color, vec3(1.0), band * pow(toward, 3.0) * 0.35 + pow(1.0 - n.z, 3.0) * 0.08);
+    color += pow(max(reflect(-L, n).z, 0.0), 50.0) * 0.35;
+
+    gl_FragColor = vec4(color, coverage);
+}
+"#;
+
 // Separable Gaussian, 9 taps folded into 5 using bilinear filtering.
 const BLUR_FRAGMENT: &str = r#"#version 100
 precision mediump float;
@@ -243,6 +338,26 @@ fn target_camera(target: &RenderTarget, rect: Rect) -> Camera2D {
     }
 }
 
+/// Appends an axis-aligned quad carrying per-shape data in its vertices.
+fn push_quad(vertices: &mut Vec<Vertex>, indices: &mut Vec<u16>, rect: Rect, uv: Vec2, color: [u8; 4], normal: Vec4) {
+    let base = vertices.len() as u16;
+    for (x, y) in [(rect.x, rect.y), (rect.right(), rect.y), (rect.right(), rect.bottom()), (rect.x, rect.bottom())] {
+        vertices.push(Vertex { position: vec3(x, y, 0.0), uv, color, normal });
+    }
+    indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+}
+
+/// macroquad batches at most 5000 indices per draw call; stay under it.
+const MAX_QUADS_PER_MESH: usize = 800;
+
+fn draw_quads(vertices: &[Vertex], indices: &[u16]) {
+    for (v, i) in vertices.chunks(MAX_QUADS_PER_MESH * 4).zip(indices.chunks(MAX_QUADS_PER_MESH * 6)) {
+        let base = i[0];
+        let indices = i.iter().map(|x| x - base).collect();
+        draw_mesh(&Mesh { vertices: v.to_vec(), indices, texture: None });
+    }
+}
+
 struct Targets {
     size: (u32, u32),
     scene: RenderTarget,
@@ -253,19 +368,34 @@ struct Targets {
 pub struct Compositor {
     targets: Option<Targets>,
     glass: Material,
+    planet: Material,
     blur: Material,
     downsample: Material,
     difference: Material,
+    empty: Texture2D,
+    // Per-frame geometry, rebuilt in place to avoid reallocating.
+    planet_vertices: Vec<Vertex>,
+    planet_indices: Vec<u16>,
 }
 
 impl Compositor {
     pub fn new() -> Self {
+        let planet_uniforms = ["HeroRect", "Icon0", "Icon1", "Icon2", "IconAlpha", "Params"]
+            .iter()
+            .map(|n| UniformDesc::new(n, UniformType::Float4))
+            .collect();
         Self {
             targets: None,
             glass: material(
                 GLASS_FRAGMENT,
                 vec![UniformDesc::new("Screen", UniformType::Float4)],
                 vec!["SceneTex".to_owned(), "BlurTex".to_owned()],
+                alpha_blend(),
+            ),
+            planet: material(
+                PLANET_FRAGMENT,
+                planet_uniforms,
+                vec!["HeroTex".to_owned(), "IconTex".to_owned()],
                 alpha_blend(),
             ),
             blur: material(BLUR_FRAGMENT, vec![UniformDesc::new("Step", UniformType::Float2)], vec![], None),
@@ -285,16 +415,21 @@ impl Compositor {
                     BlendFactor::OneMinusValue(BlendValue::SourceColor),
                 )),
             ),
+            empty: Texture2D::from_rgba8(1, 1, &[0, 0, 0, 0]),
+            planet_vertices: Vec::new(),
+            planet_indices: Vec::new(),
         }
     }
 
-    fn ensure_targets(&mut self) -> &Targets {
-        let dpr = screen_dpi_scale();
-        let w = ((screen_width() * dpr).round() as u32).max(1);
-        let h = ((screen_height() * dpr).round() as u32).max(1);
+    /// The glass source is rendered at 1 texel per CSS px: refraction
+    /// compresses what it shows and the frosted part is blurred anyway, so
+    /// full device resolution would only cost fill rate.
+    fn ensure_targets(&mut self) {
+        let w = (screen_width().round() as u32).max(1);
+        let h = (screen_height().round() as u32).max(1);
         if self.targets.as_ref().map_or(true, |t| t.size != (w, h)) {
-            let scene = render_target_ex(w, h, RenderTargetParams { sample_count: 4, depth: false });
-            let (bw, bh) = ((w / 4).max(1), (h / 4).max(1));
+            let scene = render_target(w, h);
+            let (bw, bh) = ((w / 2).max(1), (h / 2).max(1));
             let blur_a = render_target(bw, bh);
             let blur_b = render_target(bw, bh);
             for t in [&scene, &blur_a, &blur_b] {
@@ -302,26 +437,81 @@ impl Compositor {
             }
             self.targets = Some(Targets { size: (w, h), scene, blur_a, blur_b });
         }
-        self.targets.as_ref().unwrap()
     }
 
-    /// Start drawing the scene. Everything until `finish` lands in the
-    /// offscreen target, in CSS-pixel coordinates.
-    pub fn begin_scene(&mut self) {
-        let rect = Rect::new(0.0, 0.0, screen_width(), screen_height());
-        let targets = self.ensure_targets();
-        set_camera(&target_camera(&targets.scene, rect));
-        clear_background(BLACK);
+    fn build_planet_geometry(&mut self, planets: &[Planet]) {
+        self.planet_vertices.clear();
+        self.planet_indices.clear();
+        for pl in planets {
+            let color: [u8; 4] = pl.color.into();
+            let normal = vec4(pl.center.x, pl.center.y, pl.radius, 0.0);
+            // One extra px so the antialiased edge isn't clipped.
+            let r = pl.radius + 1.0;
+            push_quad(
+                &mut self.planet_vertices,
+                &mut self.planet_indices,
+                Rect::new(pl.center.x - r, pl.center.y - r, r * 2.0, r * 2.0),
+                Vec2::ZERO,
+                color,
+                normal,
+            );
+        }
     }
 
-    /// Draw a texture into the scene with difference blending.
-    pub fn draw_difference(&self, texture: &Texture2D, dest: Rect) {
-        gl_use_material(&self.difference);
-        draw_texture_ex(texture, dest.x, dest.y, WHITE, DrawTextureParams {
-            dest_size: Some(dest.size()),
-            ..Default::default()
-        });
+    /// Draws the scene with the current camera. `scale` is device px per
+    /// CSS px for the target (used for analytic antialiasing).
+    fn draw_scene(&self, scene: &Scene, scale: f32, overlays: &dyn Fn()) {
+        let (hero_tex, hero_rect) = match scene.hero {
+            Some((t, r)) => (t.clone(), vec4(r.x, r.y, r.w, r.h)),
+            None => (self.empty.clone(), Vec4::ZERO),
+        };
+        let mut icon_rects = [Vec4::ZERO; 3];
+        let mut icon_alpha = Vec4::ZERO;
+        let icon_tex = match scene.icons {
+            Some((t, slots)) => {
+                for (i, (r, a)) in slots.iter().take(3).enumerate() {
+                    icon_rects[i] = vec4(r.x, r.y, r.w, r.h);
+                    icon_alpha[i] = *a;
+                }
+                icon_alpha.w = (t.width() / t.height()).round();
+                t.clone()
+            }
+            None => self.empty.clone(),
+        };
+        self.planet.set_texture("HeroTex", hero_tex);
+        self.planet.set_texture("IconTex", icon_tex);
+        self.planet.set_uniform("HeroRect", hero_rect);
+        self.planet.set_uniform("Icon0", icon_rects[0]);
+        self.planet.set_uniform("Icon1", icon_rects[1]);
+        self.planet.set_uniform("Icon2", icon_rects[2]);
+        self.planet.set_uniform("IconAlpha", icon_alpha);
+        self.planet.set_uniform("Params", vec4(scale, 0.0, 0.0, 0.0));
+        gl_use_material(&self.planet);
+        draw_quads(&self.planet_vertices, &self.planet_indices);
         gl_use_default_material();
+
+        if let Some((tex, dest)) = scene.hero {
+            gl_use_material(&self.difference);
+            draw_texture_ex(tex, dest.x, dest.y, WHITE, DrawTextureParams {
+                dest_size: Some(dest.size()),
+                ..Default::default()
+            });
+            gl_use_default_material();
+        }
+        if let Some((tex, slots)) = scene.icons {
+            let cell = tex.height();
+            for (i, &(dest, alpha)) in slots.iter().enumerate() {
+                if alpha <= 0.0 {
+                    continue;
+                }
+                draw_texture_ex(tex, dest.x, dest.y, Color::new(1.0, 1.0, 1.0, alpha), DrawTextureParams {
+                    dest_size: Some(dest.size()),
+                    source: Some(Rect::new(i as f32 * cell, 0.0, cell, cell)),
+                    ..Default::default()
+                });
+            }
+        }
+        overlays();
     }
 
     /// Draw `src` into `dst` through `mat` (a full-target pass).
@@ -336,18 +526,26 @@ impl Compositor {
         gl_use_default_material();
     }
 
-    /// Present the scene to the screen and draw the glass on top. Leaves the
-    /// default (screen) camera active for any further drawing.
-    pub fn finish(&mut self, shapes: &[GlassShape]) {
-        let targets = self.targets.as_ref().expect("begin_scene first");
+    /// Renders a frame: the scene to the screen, plus the glass on top.
+    /// `overlays` draws anything else that belongs in the scene (arrows).
+    /// Leaves the default (screen) camera active.
+    pub fn render(&mut self, scene: &Scene, overlays: &dyn Fn(), shapes: &[GlassShape]) {
+        self.ensure_targets();
+        self.build_planet_geometry(scene.planets);
         let (sw, sh) = (screen_width(), screen_height());
+        let any_glass = shapes.iter().any(|s| s.alpha > 0.001);
 
-        // Quarter-res blurred copy of the scene for the frosted component.
-        // Two H+V iterations with growing spread give a smooth, wide falloff.
-        if shapes.iter().any(|s| s.alpha > 0.001) {
+        if any_glass {
+            let targets = self.targets.as_ref().unwrap();
+            set_camera(&target_camera(&targets.scene, Rect::new(0.0, 0.0, sw, sh)));
+            clear_background(BLACK);
+            self.draw_scene(scene, targets.size.0 as f32 / sw, overlays);
+
+            // Half-res blurred copy for the frosted component. Two H+V
+            // iterations with growing spread give a smooth, wide falloff.
             let (w, h) = targets.size;
             let small = targets.blur_a.texture.size();
-            self.downsample.set_uniform("Texel", vec2(1.0 / w as f32, 1.0 / h as f32));
+            self.downsample.set_uniform("Texel", vec2(0.5 / w as f32, 0.5 / h as f32));
             Self::pass(&self.downsample, &targets.scene, &targets.blur_a);
             for spread in [1.0, 2.0] {
                 self.blur.set_uniform("Step", vec2(spread / small.x, 0.0));
@@ -358,21 +556,16 @@ impl Compositor {
         }
 
         set_default_camera();
-        draw_texture_ex(&targets.scene.texture, 0.0, 0.0, WHITE, DrawTextureParams {
-            dest_size: Some(vec2(sw, sh)),
-            // Render targets are stored bottom-up.
-            flip_y: true,
-            ..Default::default()
-        });
+        clear_background(BLACK);
+        self.draw_scene(scene, screen_dpi_scale(), overlays);
 
-        let visible: Vec<&GlassShape> = shapes.iter().filter(|s| s.alpha > 0.001).collect();
-        if visible.is_empty() {
+        if !any_glass {
             return;
         }
-
-        let mut vertices = Vec::with_capacity(visible.len() * 4);
-        let mut indices = Vec::with_capacity(visible.len() * 6);
-        for s in visible {
+        let targets = self.targets.as_ref().unwrap();
+        let mut vertices = Vec::with_capacity(shapes.len() * 4);
+        let mut indices = Vec::with_capacity(shapes.len() * 6);
+        for s in shapes.iter().filter(|s| s.alpha > 0.001) {
             let [frost, darken, lift, refraction] = s.style.params();
             let color = [
                 (frost * 255.0) as u8,
@@ -383,20 +576,15 @@ impl Compositor {
             let normal = vec4(s.center.x, s.center.y, s.half.x, s.half.y);
             let uv = vec2(s.radius, s.alpha.clamp(0.0, 1.0));
             // Pad by a pixel so the antialiased silhouette isn't clipped.
-            let (x0, y0) = (s.center.x - s.half.x - 1.0, s.center.y - s.half.y - 1.0);
-            let (x1, y1) = (s.center.x + s.half.x + 1.0, s.center.y + s.half.y + 1.0);
-            let base = vertices.len() as u16;
-            for (x, y) in [(x0, y0), (x1, y0), (x1, y1), (x0, y1)] {
-                vertices.push(Vertex { position: vec3(x, y, 0.0), uv, color, normal });
-            }
-            indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+            let rect = Rect::new(s.center.x - s.half.x - 1.0, s.center.y - s.half.y - 1.0, s.half.x * 2.0 + 2.0, s.half.y * 2.0 + 2.0);
+            push_quad(&mut vertices, &mut indices, rect, uv, color, normal);
         }
 
         self.glass.set_texture("SceneTex", targets.scene.texture.clone());
         self.glass.set_texture("BlurTex", targets.blur_a.texture.clone());
         self.glass.set_uniform("Screen", vec4(sw, sh, screen_dpi_scale(), 0.0));
         gl_use_material(&self.glass);
-        draw_mesh(&Mesh { vertices, indices, texture: None });
+        draw_quads(&vertices, &indices);
         gl_use_default_material();
     }
 }

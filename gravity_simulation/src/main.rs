@@ -1,6 +1,6 @@
 mod glass;
 
-use glass::{Compositor, GlassShape, GlassStyle};
+use glass::{Compositor, GlassShape, GlassStyle, Planet, Scene};
 use macroquad::prelude::*;
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -274,13 +274,6 @@ struct Body {
 impl Body {
     fn new(pos: Vec2, vel: Vec2, mass: f32, radius: f32, color: Color) -> Self {
         Self { pos, vel, mass, radius, color }
-    }
-
-    fn draw(&self) {
-        // draw_circle uses a fixed 20-gon, which looks faceted on large or
-        // high-DPI bodies. Scale the segment count with the radius instead.
-        let sides = (self.radius * 1.5).clamp(32.0, 128.0) as u8;
-        draw_poly(self.pos.x, self.pos.y, sides, self.radius, 0.0, self.color);
     }
 }
 
@@ -626,8 +619,8 @@ fn window_conf() -> Conf {
         window_width: 1280,
         window_height: 800,
         high_dpi: true,
-        // The scene is drawn into a 4x MSAA render target (see glass.rs),
-        // which needs WebGL2 on the web.
+        // WebGL2: the glass passes rely on non-power-of-two render targets
+        // and textures, which WebGL1 restricts.
         platform: miniquad::conf::Platform {
             webgl_version: miniquad::conf::WebGLVersion::WebGL2,
             ..Default::default()
@@ -753,36 +746,32 @@ fn frame(w: &mut World, overlay: &mut Overlay, compositor: &mut Compositor) {
     }
 
     // ----- Render -----
-    // Scene pass: everything the glass can refract.
-    compositor.begin_scene();
-    for body in &w.bodies {
-        body.draw();
-    }
-
     overlay.hero.realize();
     overlay.icons.realize();
-    if let Some(tex) = &overlay.hero.texture {
-        compositor.draw_difference(tex, overlay.hero.dest.offset(overlay.hero.offset));
-    }
-    if let Some(tex) = &overlay.icons.texture {
-        let cell = tex.height();
-        for (i, &(dest, alpha)) in overlay.icon_slots.iter().enumerate() {
-            draw_texture_ex(tex, dest.x, dest.y, Color::new(1.0, 1.0, 1.0, alpha), DrawTextureParams {
-                dest_size: Some(dest.size()),
-                source: Some(Rect::new(i as f32 * cell, 0.0, cell, cell)),
-                ..Default::default()
-            });
+    let planets: Vec<Planet> = w
+        .bodies
+        .iter()
+        .map(|b| Planet { center: b.pos, radius: b.radius, color: b.color })
+        .collect();
+    let scene = Scene {
+        planets: &planets,
+        hero: overlay
+            .hero
+            .texture
+            .as_ref()
+            .map(|t| (t, overlay.hero.dest.offset(overlay.hero.offset))),
+        icons: overlay.icons.texture.as_ref().map(|t| (t, &overlay.icon_slots[..])),
+    };
+    let arrows = || {
+        if paused {
+            for body in &w.bodies {
+                draw_velocity_arrow(body);
+            }
         }
-    }
+    };
 
-    if paused {
-        for body in &w.bodies {
-            draw_velocity_arrow(body);
-        }
-    }
-
-    // Glass pass. Panels first, then per-body controls, then the small page
-    // controls, matching the HTML stacking order.
+    // Glass, back to front: panels, then per-body controls, then the small
+    // page controls, matching the HTML stacking order.
     let mut shapes: Vec<GlassShape> = overlay
         .glass
         .iter()
@@ -808,7 +797,7 @@ fn frame(w: &mut World, overlay: &mut Overlay, compositor: &mut Compositor) {
         }
     }
     shapes.extend(overlay.glass.iter().filter(|s| matches!(s.style, GlassStyle::Clear)).copied());
-    compositor.finish(&shapes);
+    compositor.render(&scene, &arrows, &shapes);
 
     if CANVAS_UI {
         if paused {
