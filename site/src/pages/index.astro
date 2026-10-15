@@ -1,7 +1,7 @@
 ---
 const name = "Sid Lakkoju";
 const siteUrl = "https://sidlakkoju.github.io/";
-const title = `${name} — Engineer at SpaceX`;
+const title = name;
 const description =
 	"Sid Lakkoju is an engineer at SpaceX. Personal site with links to Sid's YouTube, GitHub, and LinkedIn, plus an interactive three-body gravity simulation.";
 const ogImage = new URL("/og.png", siteUrl).href;
@@ -101,6 +101,10 @@ const structuredData = {
 	<body>
 		<canvas id="glcanvas" tabindex="0" aria-label="Interactive three-body gravity simulation"></canvas>
 
+		<!-- Once the sim is running, the renderer draws this headline and the
+		     icons itself (from pixels rasterized below) so the glass can refract
+		     them. The HTML stays underneath as the accessible/indexable copy and
+		     as the fallback when WebGL or motion is unavailable. -->
 		<main>
 			<h1>{name}</h1>
 			<p>Nerd @SpaceX 🚀</p>
@@ -124,58 +128,65 @@ const structuredData = {
 			</nav>
 		</main>
 
-		<!-- Sim controls. These used to be drawn into the canvas; as HTML they
-		     can use real backdrop blur. The Rust side exposes the state they
-		     need through window.wasm_exports (see gravity_simulation/src/main.rs). -->
+		<!-- Glass UI. Elements marked .glass are drawn by the renderer as
+		     refractive glass at their on-screen rect; the HTML only provides the
+		     content, layout, and hit areas. -->
 		<div class="sim-ui">
 			<div class="sim-buttons">
 				<button id="add-btn" class="glass glass-btn" aria-label="Add planet" tabindex="-1">
-					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13" /></svg>
 				</button>
 				<button id="pause-btn" class="glass glass-btn" aria-label="Pause simulation" aria-pressed="false">
-					<svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5v11M15 6.5v11" /></svg>
-					<svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M8.5 6.6v10.8a1 1 0 0 0 1.52.85l8.5-5.4a1 1 0 0 0 0-1.7l-8.5-5.4a1 1 0 0 0-1.52.85Z" /></svg>
+					<svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7v10M15 7v10" /></svg>
+					<svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M8.75 6.9v10.2a.9.9 0 0 0 1.38.76l8.03-5.1a.9.9 0 0 0 0-1.52l-8.03-5.1a.9.9 0 0 0-1.38.76Z" /></svg>
 				</button>
 			</div>
 
 			<div id="body-controls"></div>
 
-			<aside id="sim-info" class="glass" aria-live="polite">
-				<header>
-					<svg viewBox="0 0 24 24" aria-hidden="true">
-						<circle cx="12" cy="12" r="9.25" />
-						<path d="M12 11v5.5" />
-						<circle class="fill" cx="12" cy="7.75" r="1.1" />
-					</svg>
-					<h2>The three-body problem</h2>
-				</header>
+			<aside id="sim-info" class="glass glass-panel" aria-live="polite">
+				<h2>The three-body problem</h2>
 				<p>
-					There's no general closed-form solution — even tiny differences in starting
+					There's no general closed-form solution. Even tiny differences in starting
 					conditions lead to wildly different orbits.
 				</p>
 				<a class="formula" href="https://en.wikipedia.org/wiki/Newton%27s_law_of_universal_gravitation" target="_blank" rel="noopener noreferrer">
-					<span><var>F</var><sub>g</sub> = <var>G</var> · <var>m</var><sub>1</sub><var>m</var><sub>2</sub> / <var>d</var><sup>2</sup></span>
-					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16 16 8M9.5 8H16v6.5" /></svg>
+					<span class="math" aria-label="F g equals G times m 1 m 2 over d squared">
+						<span>F<sub>g</sub></span>
+						<span class="op">=</span>
+						<span>G</span>
+						<span class="frac">
+							<span>m<sub>1</sub>m<sub>2</sub></span>
+							<span>d<sup>2</sup></span>
+						</span>
+					</span>
+					<span class="formula-label">Newton's law of gravitation <span aria-hidden="true">↗</span></span>
 				</a>
 				<p>i think this is super cool - you should watch the netflix show.</p>
 				<p class="hint">Drag a planet to move it. Drag its arrow to change its velocity.</p>
 			</aside>
 		</div>
 
+		<!-- Sizes must match CTL_* in gravity_simulation/src/main.rs. -->
 		<template id="body-ctl-template">
-			<button class="glass remove" data-action="remove" aria-label="Remove planet" tabindex="-1">
-				<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 7.5l9 9M16.5 7.5l-9 9" /></svg>
+			<button class="remove" data-action="remove" aria-label="Remove planet" tabindex="-1">
+				<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8l8 8M16 8l-8 8" /></svg>
 			</button>
-			<div class="glass stepper">
+			<div class="stepper">
 				<button data-action="lighter" aria-label="Decrease mass" tabindex="-1">
-					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12" /></svg>
+					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 12h11" /></svg>
 				</button>
 				<output aria-label="Mass"></output>
 				<button data-action="heavier" aria-label="Increase mass" tabindex="-1">
-					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12" /></svg>
+					<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5v11M6.5 12h11" /></svg>
 				</button>
 			</div>
 		</template>
+
+		<script>
+			import { animateFavicon } from "../favicon.js";
+			animateFavicon();
+		</script>
 
 		<script is:inline src="/sim/mq_js_bundle.js"></script>
 		<script is:inline>
@@ -193,87 +204,220 @@ const structuredData = {
 
 			const root = document.documentElement;
 			const canvas = document.getElementById("glcanvas");
+			const heading = document.querySelector("main h1");
+			const tagline = document.querySelector("main p");
+			const iconLinks = [...document.querySelectorAll(".social-links a")];
 			const pauseBtn = document.getElementById("pause-btn");
 			const addBtn = document.getElementById("add-btn");
+			const infoCard = document.getElementById("sim-info");
 			const bodyControls = document.getElementById("body-controls");
 			const template = document.getElementById("body-ctl-template");
 			const massFormat = new Intl.NumberFormat("en-US");
 
+			// [element, glass style]: 0 = clear control, 1 = frosted panel.
+			const glassElements = [[infoCard, 1], [addBtn, 0], [pauseBtn, 0]];
+
+			// Must match CTL_* in main.rs so the HTML lands on the drawn glass.
+			const CTL_GAP = 14;
+			const STEPPER_H = 32;
+
 			// Pool of per-body controls; pool[i] always belongs to body i.
 			const pool = [];
 			let paused = false;
-			let unpausedAt = 0;
+			// Where the headline was when it was rasterized; per-frame movement
+			// relative to this is forwarded to the renderer.
+			let headingOrigin = null;
+
+			// ---- Pixel upload into the renderer -------------------------------
+
+			function upload(ex, slot, ctx, x, y, w, h) {
+				const { width, height } = ctx.canvas;
+				const pixels = ctx.getImageData(0, 0, width, height).data;
+				const ptr = ex.ui_alloc(pixels.length);
+				// Read the buffer after ui_alloc: allocating may grow wasm memory.
+				new Uint8Array(wasm_memory.buffer, ptr, pixels.length).set(pixels);
+				ex.ui_upload(slot, width, height, x, y, w, h);
+			}
+
+			function context2d(width, height) {
+				const c = document.createElement("canvas");
+				c.width = width;
+				c.height = height;
+				return c.getContext("2d", { willReadFrequently: true });
+			}
+
+			// Draw the headline + tagline exactly where the HTML lays them out,
+			// in the same system font, at device resolution.
+			function rasterizeHeadline(ex) {
+				const dpr = window.devicePixelRatio || 1;
+				const els = [heading, tagline];
+				const rects = els.map((el) => el.getBoundingClientRect());
+				const pad = 24;
+				const left = Math.floor((Math.min(...rects.map((r) => r.left)) - pad) * dpr) / dpr;
+				const top = Math.floor((Math.min(...rects.map((r) => r.top)) - pad) * dpr) / dpr;
+				const right = Math.max(...rects.map((r) => r.right)) + pad;
+				const bottom = Math.max(...rects.map((r) => r.bottom)) + pad;
+				const ctx = context2d(Math.ceil((right - left) * dpr), Math.ceil((bottom - top) * dpr));
+				ctx.scale(dpr, dpr);
+				ctx.translate(-left, -top);
+				ctx.fillStyle = "#fff";
+				ctx.textAlign = "center";
+				els.forEach((el, i) => {
+					const cs = getComputedStyle(el);
+					ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+					if ("letterSpacing" in ctx) ctx.letterSpacing = cs.letterSpacing === "normal" ? "0px" : cs.letterSpacing;
+					ctx.globalAlpha = parseFloat(cs.opacity);
+					const text = el.textContent.trim();
+					const m = ctx.measureText(text);
+					const ascent = m.fontBoundingBoxAscent;
+					const descent = m.fontBoundingBoxDescent;
+					const r = rects[i];
+					ctx.fillText(text, r.left + r.width / 2, r.top + (r.height - ascent - descent) / 2 + ascent);
+				});
+				upload(ex, 0, ctx, left, top, ctx.canvas.width / dpr, ctx.canvas.height / dpr);
+				headingOrigin = rects[0];
+			}
+
+			// While the info card is up, lift the headline just enough to clear
+			// it (but never under the top buttons).
+			function updateHeroShift() {
+				let shift = 0;
+				if (paused) {
+					const current = parseFloat(root.style.getPropertyValue("--hero-shift")) || 0;
+					const nav = document.querySelector(".social-links").getBoundingClientRect();
+					const top = heading.getBoundingClientRect().top - current;
+					const cardTop = window.innerHeight - parseFloat(getComputedStyle(infoCard).bottom) - infoCard.offsetHeight;
+					const needed = cardTop - 20 - (nav.bottom - current);
+					shift = Math.max(Math.min(0, needed), -(top - 80));
+				}
+				root.style.setProperty("--hero-shift", `${Math.round(shift)}px`);
+			}
+
+			// Icon atlas: one square cell per social icon, rendered with headroom
+			// for the hover scale so it stays crisp.
+			function rasterizeIcons(ex) {
+				const dpr = window.devicePixelRatio || 1;
+				const size = parseFloat(getComputedStyle(iconLinks[0].querySelector("svg")).width);
+				const cell = Math.ceil(size * 1.25 * dpr);
+				const ctx = context2d(cell * iconLinks.length, cell);
+				ctx.fillStyle = "#fff";
+				iconLinks.forEach((a, i) => {
+					ctx.setTransform(cell / 24, 0, 0, cell / 24, i * cell, 0);
+					ctx.fill(new Path2D(a.querySelector("path").getAttribute("d")));
+				});
+				upload(ex, 1, ctx, 0, 0, 0, 0);
+			}
+
+			// ---- Per-frame sync -------------------------------------------------
 
 			function makeControls(i) {
 				const frag = template.content.cloneNode(true);
 				const remove = frag.querySelector(".remove");
 				const stepper = frag.querySelector(".stepper");
 				remove.dataset.index = stepper.dataset.index = i;
+				for (const b of [remove, ...stepper.querySelectorAll("button")]) b.tabIndex = paused ? 0 : -1;
 				bodyControls.append(frag);
 				return { remove, stepper, output: stepper.querySelector("output"), mass: -1, shown: true };
 			}
 
 			function setPaused(p) {
 				paused = p;
-				if (!p) unpausedAt = performance.now();
 				root.classList.toggle("paused", p);
+				updateHeroShift();
 				pauseBtn.setAttribute("aria-pressed", String(p));
 				pauseBtn.setAttribute("aria-label", p ? "Resume simulation" : "Pause simulation");
 				addBtn.tabIndex = p ? 0 : -1;
 				for (const c of pool) {
-					for (const b of c.stepper.querySelectorAll("button")) b.tabIndex = p ? 0 : -1;
-					c.remove.tabIndex = p ? 0 : -1;
+					for (const b of [c.remove, ...c.stepper.querySelectorAll("button")]) b.tabIndex = p ? 0 : -1;
 				}
 			}
 
-			// Runs after macroquad's own rAF callback each frame (it's started
-			// once wasm is up, so it's queued behind the sim), which keeps the
-			// controls in lockstep with the bodies while dragging.
+			// Runs right after macroquad's own rAF callback each frame (it's
+			// started once wasm is up, so it's queued behind the sim). Body
+			// controls therefore track the bodies the sim just drew; the page's
+			// glass rects reach the renderer one frame later, which is invisible
+			// for the slow, mostly static shapes they describe.
 			function sync() {
 				const ex = window.wasm_exports;
 				const p = ex.is_paused() !== 0;
 				if (p !== paused) setPaused(p);
 
-				// Keep tracking briefly after resuming so controls don't freeze
-				// in place while they fade out.
-				if (paused || performance.now() - unpausedAt < 300) {
-					const n = ex.body_count();
-					while (pool.length < n) pool.push(makeControls(pool.length));
-					for (let i = 0; i < pool.length; i++) {
-						const c = pool[i];
-						const shown = i < n;
-						if (shown !== c.shown) {
-							c.shown = shown;
-							c.remove.hidden = c.stepper.hidden = !shown;
-						}
-						if (!shown) continue;
-						const x = ex.body_x(i);
-						const y = ex.body_y(i);
-						const r = ex.body_radius(i);
-						// Remove button sits just off the body's upper-right edge,
-						// mass stepper is centered below it.
-						const o = r * 0.72 + 14;
-						c.remove.style.transform = `translate3d(${x + o}px, ${y - o}px, 0) translate(-50%, -50%)`;
-						c.stepper.style.transform = `translate3d(${x}px, ${y + r + 14}px, 0) translateX(-50%)`;
-						const mass = ex.body_mass(i);
-						if (mass !== c.mass) {
-							c.mass = mass;
-							c.output.textContent = massFormat.format(Math.round(mass));
-						}
+				// Reads first (rects, computed styles) so layout is flushed once.
+				const glass = glassElements.map(([el, style]) => {
+					const r = el.getBoundingClientRect();
+					const cs = getComputedStyle(el);
+					const scale = el.offsetWidth ? r.width / el.offsetWidth : 1;
+					const alpha = cs.visibility === "hidden" ? 0 : parseFloat(cs.opacity);
+					return [r.x, r.y, r.width, r.height, parseFloat(cs.borderTopLeftRadius) * scale, alpha, style];
+				});
+				const icons = iconLinks.map((a) => {
+					const r = a.querySelector("svg").getBoundingClientRect();
+					return [r.x, r.y, r.width, r.height, parseFloat(getComputedStyle(a).opacity)];
+				});
+				const bodyAlpha = pool.length ? parseFloat(getComputedStyle(pool[0].stepper).opacity) : 0;
+				const headingNow = heading.getBoundingClientRect();
+
+				ex.glass_clear();
+				for (const g of glass) if (g[5] > 0) ex.glass_push(...g);
+				icons.forEach((icon, i) => ex.icon_set(i, ...icon));
+				ex.set_body_ui_alpha(bodyAlpha);
+				if (headingOrigin) ex.ui_offset(0, headingNow.left - headingOrigin.left, headingNow.top - headingOrigin.top);
+
+				const n = ex.body_count();
+				while (pool.length < n) pool.push(makeControls(pool.length));
+				for (let i = 0; i < pool.length; i++) {
+					const c = pool[i];
+					const shown = i < n;
+					if (shown !== c.shown) {
+						c.shown = shown;
+						c.remove.hidden = c.stepper.hidden = !shown;
+					}
+					if (!shown) continue;
+					const x = ex.body_x(i);
+					const y = ex.body_y(i);
+					const r = ex.body_radius(i);
+					const o = r * 0.72 + CTL_GAP;
+					c.remove.style.transform = `translate3d(${x + o}px, ${y - o}px, 0) translate(-50%, -50%)`;
+					c.stepper.style.transform = `translate3d(${x}px, ${y + r + CTL_GAP + STEPPER_H / 2}px, 0) translate(-50%, -50%)`;
+					const mass = ex.body_mass(i);
+					if (mass !== c.mass) {
+						c.mass = mass;
+						c.output.textContent = massFormat.format(Math.round(mass));
 					}
 				}
 				requestAnimationFrame(sync);
 			}
 
-			function waitForSim() {
-				if (window.wasm_exports?.body_count) {
-					root.classList.add("sim-ready");
-					requestAnimationFrame(sync);
-				} else {
-					setTimeout(waitForSim, 50);
-				}
+			let rasterizeQueued = false;
+			function rasterize() {
+				const ex = window.wasm_exports;
+				rasterizeQueued = false;
+				rasterizeHeadline(ex);
+				rasterizeIcons(ex);
 			}
-			if (!reduce) waitForSim();
+
+			async function start() {
+				const ex = window.wasm_exports;
+				// Wait until the sim has run a frame and the system font is ready.
+				if (!ex?.ui_upload || ex.body_count() === 0) {
+					setTimeout(start, 50);
+					return;
+				}
+				await document.fonts.ready;
+				rasterize();
+				requestAnimationFrame(sync);
+				// Give the renderer two frames to pick up the textures before
+				// the canvas fades in over the HTML headline it replaces.
+				requestAnimationFrame(() => requestAnimationFrame(() => root.classList.add("sim-ready")));
+			}
+			if (!reduce) start();
+
+			window.addEventListener("resize", () => {
+				updateHeroShift();
+				if (rasterizeQueued || !root.classList.contains("sim-ready")) return;
+				rasterizeQueued = true;
+				requestAnimationFrame(rasterize);
+			});
 
 			pauseBtn.addEventListener("click", () => {
 				window.wasm_exports?.set_paused(paused ? 0 : 1);
@@ -309,8 +453,12 @@ const structuredData = {
 			:root {
 				--ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
 				--ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-				--glass-blur: blur(22px) saturate(170%);
-				--text-secondary: rgba(235, 235, 245, 0.62);
+				--label: #fff;
+				--label-secondary: rgba(255, 255, 255, 0.82);
+				--label-tertiary: rgba(255, 255, 255, 0.62);
+				--separator: rgba(255, 255, 255, 0.16);
+				--font-text: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+				--font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
 				--safe-top: env(safe-area-inset-top, 0px);
 				--safe-right: env(safe-area-inset-right, 0px);
 				--safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -322,8 +470,8 @@ const structuredData = {
 				padding: 0;
 				height: 100%;
 				background: #000;
-				color: #fff;
-				font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+				color: var(--label);
+				font-family: var(--font-text);
 				-webkit-font-smoothing: antialiased;
 				-moz-osx-font-smoothing: grayscale;
 				-webkit-tap-highlight-color: transparent;
@@ -336,22 +484,26 @@ const structuredData = {
 				width: 100%;
 				height: 100%;
 				display: block;
-				z-index: 0;
+				/* Above the HTML headline: once running, the renderer draws the
+				   headline itself so glass can refract it. Transparent until then. */
+				z-index: 1;
+				opacity: 0;
+				transition: opacity 0.5s ease;
 				/* macroquad calls canvas.focus() on startup so it gets key events;
 				   without this the browser draws its focus ring around the page. */
 				outline: none;
-				/* Canvas catches clicks so the macroquad sim can handle its
-				   own drag interactions. `main` below has pointer-events: none
-				   so the overlaid text doesn't block. */
-				pointer-events: auto;
 				/* Disable native touch gestures so drag interactions aren't
 				   hijacked by the browser's scroll/pinch on mobile. */
 				touch-action: none;
 			}
+			.sim-ready #glcanvas {
+				opacity: 1;
+			}
 
+			/* No z-index here on purpose: the headline paints below the canvas
+			   while the social links (positioned, z-index 2) stay clickable. */
 			main {
 				position: relative;
-				z-index: 1;
 				min-height: 100vh;
 				min-height: 100dvh;
 				padding: 0 24px;
@@ -366,11 +518,16 @@ const structuredData = {
 
 			main h1 {
 				margin: 0;
-				font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+				font-family: var(--font-display);
 				font-size: clamp(2.5rem, 8vw, 6rem);
 				font-weight: 600;
 				letter-spacing: -0.03em;
 				mix-blend-mode: difference;
+			}
+
+			main > * {
+				transform: translateY(var(--hero-shift, 0px));
+				transition: transform 0.7s var(--ease-spring);
 			}
 
 			main p {
@@ -380,7 +537,10 @@ const structuredData = {
 				mix-blend-mode: difference;
 			}
 
+			/* Positioned above the canvas so the links stay clickable. */
 			.social-links {
+				position: relative;
+				z-index: 2;
 				display: flex;
 				justify-content: center;
 				gap: 2rem;
@@ -392,90 +552,29 @@ const structuredData = {
 				color: #fff;
 				opacity: 0.8;
 				border-radius: 6px;
-				transition: transform 0.4s var(--ease-spring), opacity 0.2s ease;
+				transition: transform 0.45s var(--ease-spring), opacity 0.2s ease;
 				/* Re-enable clicks; parent <main> sets pointer-events: none
 				   so canvas drags can pass through to the sim. */
 				pointer-events: auto;
 			}
-
 			.social-links a:hover {
-				transform: scale(1.18);
+				transform: scale(1.15);
 				opacity: 1;
 			}
-
 			.social-links svg {
 				width: 2rem;
 				height: 2rem;
 			}
-
-			/* ------------------------------------------------------------------
-			   Glass material. Layers, back to front:
-			   - backdrop blur + saturation boost (the planets glow through)
-			   - a faint white tint that's brighter at the top, like light
-			     falling on a lens
-			   - a gradient hairline rim (::before) that catches light on the
-			     top-left and bottom-right edges
-			   - a crisp inner top highlight and a soft drop shadow
-			   Only opacity and transform are ever animated, so it stays on the
-			   compositor.
-			   ------------------------------------------------------------------ */
-			.glass {
-				position: relative;
-				isolation: isolate;
-				color: #fff;
-				background:
-					radial-gradient(120% 90% at 50% -10%, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0) 60%),
-					linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.025)),
-					rgba(22, 22, 26, 0.38);
-				-webkit-backdrop-filter: var(--glass-blur);
-				backdrop-filter: var(--glass-blur);
-				box-shadow:
-					inset 0 1px 0.5px rgba(255, 255, 255, 0.22),
-					inset 0 -1px 1px rgba(255, 255, 255, 0.04),
-					0 1px 2px rgba(0, 0, 0, 0.3),
-					0 12px 32px -8px rgba(0, 0, 0, 0.6);
-			}
-			.glass::before {
-				content: "";
-				position: absolute;
-				inset: 0;
-				z-index: -1;
-				border-radius: inherit;
-				padding: 1px;
-				background: linear-gradient(
-					145deg,
-					rgba(255, 255, 255, 0.5) 0%,
-					rgba(255, 255, 255, 0.12) 22%,
-					rgba(255, 255, 255, 0.04) 50%,
-					rgba(255, 255, 255, 0.1) 78%,
-					rgba(255, 255, 255, 0.32) 100%
-				);
-				-webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-				-webkit-mask-composite: xor;
-				mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-				pointer-events: none;
-			}
-			@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-				.glass { background-color: rgba(30, 30, 34, 0.92); }
+			/* The renderer draws the icons once it's running; these stay as
+			   the hit areas (and drive the hover animation it mirrors). */
+			.sim-ready .social-links svg {
+				opacity: 0;
 			}
 
-			.glass svg,
-			#sim-info svg {
-				fill: none;
-				stroke: currentColor;
-				stroke-width: 2;
-				stroke-linecap: round;
-				stroke-linejoin: round;
-			}
-			.glass svg .fill,
-			#sim-info svg .fill {
-				fill: currentColor;
-				stroke: none;
-			}
-
-			.glass button,
-			button.glass {
+			button {
 				font: inherit;
+				color: inherit;
+				background: none;
 				border: 0;
 				padding: 0;
 				cursor: pointer;
@@ -483,17 +582,26 @@ const structuredData = {
 				user-select: none;
 				touch-action: manipulation;
 			}
-			.glass-btn:focus-visible,
-			.glass button:focus-visible,
-			.remove:focus-visible,
-			#sim-info a:focus-visible,
+			.sim-ui svg {
+				fill: none;
+				stroke: currentColor;
+				stroke-width: 2;
+				stroke-linecap: round;
+				stroke-linejoin: round;
+			}
+			.sim-ui svg .fill {
+				fill: currentColor;
+				stroke: none;
+			}
+			.sim-ui button:focus-visible,
+			.sim-ui a:focus-visible,
 			.social-links a:focus-visible {
-				outline: 2px solid rgba(255, 255, 255, 0.85);
+				outline: 2px solid #fff;
 				outline-offset: 3px;
 			}
 
-			/* Everything sim-related stays hidden until the wasm is running (and
-			   forever under prefers-reduced-motion, where the sim never loads). */
+			/* Hidden until the renderer is up (and forever under reduced motion,
+			   where the sim never loads). */
 			.sim-ui {
 				display: none;
 			}
@@ -504,43 +612,37 @@ const structuredData = {
 				pointer-events: none !important;
 			}
 
-			/* ---- Pause / add buttons ---- */
+			/* ---- Pause / add ---- */
 			.sim-buttons {
 				position: fixed;
 				top: max(16px, var(--safe-top));
 				right: max(16px, var(--safe-right));
 				z-index: 4;
 				display: flex;
-				gap: 10px;
-				animation: rise-in 0.7s var(--ease-out) both;
+				gap: 12px;
 			}
 			.glass-btn {
 				display: grid;
 				place-items: center;
-				width: 44px;
-				height: 44px;
+				width: 46px;
+				height: 46px;
 				border-radius: 50%;
-				transition:
-					transform 0.45s var(--ease-spring),
-					opacity 0.3s ease,
-					background-color 0.2s ease;
+				transition: transform 0.5s var(--ease-spring), opacity 0.3s ease, visibility 0s;
 			}
 			.glass-btn svg {
 				grid-area: 1 / 1;
 				width: 20px;
 				height: 20px;
-				transition: transform 0.4s var(--ease-spring), opacity 0.2s ease;
-			}
-			.glass-btn:hover {
-				background-color: rgba(60, 60, 68, 0.45);
+				stroke-width: 2.25;
+				transition: transform 0.45s var(--ease-spring), opacity 0.2s ease;
 			}
 			.glass-btn:active {
-				transform: scale(0.9);
+				transform: scale(0.88);
 			}
 
 			.icon-play {
 				opacity: 0;
-				transform: scale(0.6);
+				transform: scale(0.5);
 			}
 			.paused .icon-play {
 				opacity: 1;
@@ -548,21 +650,23 @@ const structuredData = {
 			}
 			.paused .icon-pause {
 				opacity: 0;
-				transform: scale(0.6);
+				transform: scale(0.5);
 			}
 
 			#add-btn {
 				opacity: 0;
-				transform: translateX(22px) scale(0.6);
-				pointer-events: none;
+				visibility: hidden;
+				transform: scale(0.4);
+				transition: transform 0.4s var(--ease-out), opacity 0.2s ease, visibility 0s linear 0.4s;
 			}
 			.paused #add-btn {
 				opacity: 1;
+				visibility: visible;
 				transform: none;
-				pointer-events: auto;
+				transition: transform 0.55s var(--ease-spring), opacity 0.25s ease, visibility 0s;
 			}
 			.paused #add-btn:active {
-				transform: scale(0.9);
+				transform: scale(0.88);
 			}
 
 			/* ---- Per-body controls (positioned every frame from JS) ----
@@ -575,7 +679,7 @@ const structuredData = {
 				will-change: transform;
 				opacity: 0;
 				visibility: hidden;
-				transition: opacity 0.22s ease, visibility 0s linear 0.22s;
+				transition: opacity 0.2s ease, visibility 0s linear 0.2s;
 			}
 			.paused #body-controls > * {
 				opacity: 1;
@@ -589,37 +693,38 @@ const structuredData = {
 			.remove {
 				display: grid;
 				place-items: center;
-				width: 26px;
-				height: 26px;
+				width: 28px;
+				height: 28px;
 				border-radius: 50%;
-				transition: background-color 0.2s ease;
 			}
 			/* Bigger invisible hit area for fingers. */
 			.remove::after {
 				content: "";
 				position: absolute;
-				inset: -9px;
+				inset: -8px;
 				border-radius: 50%;
 			}
 			.remove svg {
 				width: 14px;
 				height: 14px;
-				stroke-width: 2.4;
-				transition: transform 0.4s var(--ease-spring);
+				stroke-width: 2.5;
+				transition: transform 0.4s var(--ease-spring), color 0.15s ease;
 			}
-			.remove:hover {
-				background-color: rgba(255, 69, 58, 0.55);
+			.remove:hover svg {
+				color: #ff6961;
 			}
 			.remove:active svg {
-				transform: scale(0.8);
+				transform: scale(0.75);
 			}
 
 			.stepper {
 				display: flex;
 				align-items: center;
+				justify-content: space-between;
+				box-sizing: border-box;
+				width: 116px;
 				height: 32px;
 				padding: 0 2px;
-				border-radius: 16px;
 			}
 			.stepper button {
 				display: grid;
@@ -627,28 +732,22 @@ const structuredData = {
 				width: 28px;
 				height: 28px;
 				border-radius: 50%;
-				background: transparent;
-				color: inherit;
-				transition: background-color 0.2s ease, transform 0.35s var(--ease-spring);
+				transition: transform 0.35s var(--ease-spring), background-color 0.15s ease;
 			}
 			.stepper button svg {
 				width: 14px;
 				height: 14px;
-				stroke-width: 2.2;
-			}
-			.stepper button:hover {
-				background: rgba(255, 255, 255, 0.12);
+				stroke-width: 2.4;
 			}
 			.stepper button:active {
-				transform: scale(0.86);
-				background: rgba(255, 255, 255, 0.2);
+				transform: scale(0.82);
+				background: rgba(255, 255, 255, 0.16);
 			}
 			.stepper output {
-				min-width: 52px;
-				padding: 0 2px;
+				flex: 1;
 				text-align: center;
-				font-size: 13px;
-				font-weight: 590;
+				font-size: 14px;
+				font-weight: 600;
 				letter-spacing: -0.01em;
 				font-variant-numeric: tabular-nums;
 			}
@@ -661,116 +760,103 @@ const structuredData = {
 				right: max(12px, var(--safe-right));
 				bottom: max(12px, calc(var(--safe-bottom) + 4px));
 				box-sizing: border-box;
-				max-width: 420px;
+				max-width: 400px;
 				margin: 0 auto;
-				padding: 18px 20px 16px;
-				border-radius: 26px;
+				padding: 20px 22px 18px;
+				border-radius: 30px;
 				font-size: 15px;
-				line-height: 1.45;
-				letter-spacing: -0.01em;
+				line-height: 1.4;
+				letter-spacing: -0.012em;
 				opacity: 0;
 				visibility: hidden;
-				transform: translateY(16px) scale(0.97);
+				transform: translateY(14px) scale(0.96);
 				transform-origin: 50% 100%;
 				transition:
-					opacity 0.25s ease,
-					transform 0.35s var(--ease-out),
-					visibility 0s linear 0.35s;
+					opacity 0.2s ease,
+					transform 0.3s var(--ease-out),
+					visibility 0s linear 0.3s;
 			}
 			.paused #sim-info {
 				opacity: 1;
 				visibility: visible;
 				transform: none;
 				transition:
-					opacity 0.35s ease,
+					opacity 0.3s ease,
 					transform 0.6s var(--ease-spring),
 					visibility 0s;
 			}
-			#sim-info header {
-				display: flex;
-				align-items: center;
-				gap: 8px;
-				margin-bottom: 6px;
-			}
-			#sim-info header svg {
-				width: 20px;
-				height: 20px;
-				flex-shrink: 0;
-				stroke-width: 1.7;
-				color: rgba(255, 255, 255, 0.75);
-			}
 			#sim-info h2 {
-				margin: 0;
-				font-size: 17px;
-				font-weight: 600;
-				letter-spacing: -0.02em;
+				margin: 0 0 6px;
+				font-family: var(--font-display);
+				font-size: 19px;
+				font-weight: 650;
+				letter-spacing: -0.022em;
+				line-height: 1.2;
 			}
 			#sim-info p {
 				margin: 0;
-				color: var(--text-secondary);
+				color: var(--label-secondary);
 				text-wrap: pretty;
 			}
-			#sim-info p + p,
-			#sim-info .formula + p {
-				margin-top: 10px;
-			}
 			#sim-info .hint {
-				margin-top: 12px;
+				margin-top: 14px;
 				padding-top: 12px;
-				border-top: 0.5px solid rgba(255, 255, 255, 0.14);
+				border-top: 0.5px solid var(--separator);
 				font-size: 13px;
-				color: rgba(235, 235, 245, 0.45);
+				color: var(--label-tertiary);
 			}
 
 			.formula {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 16px;
+				margin: 14px 0;
+				color: var(--label);
+				text-decoration: none;
+			}
+			.math {
 				display: inline-flex;
 				align-items: center;
-				gap: 8px;
-				margin-top: 12px;
-				padding: 7px 10px 7px 12px;
-				border-radius: 12px;
-				background: rgba(255, 255, 255, 0.07);
-				box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
-				color: #fff;
-				text-decoration: none;
-				font-family: "New York", ui-serif, "Iowan Old Style", Georgia, serif;
-				font-size: 16px;
+				gap: 6px;
+				font-family: var(--font-display);
+				font-size: 20px;
+				font-weight: 500;
 				letter-spacing: 0;
-				transition: background-color 0.2s ease, transform 0.35s var(--ease-spring);
+				white-space: nowrap;
 			}
-			.formula var {
-				font-style: italic;
+			.math .op {
+				color: var(--label-tertiary);
 			}
-			.formula sub,
-			.formula sup {
-				font-size: 0.68em;
+			.math sub,
+			.math sup {
+				font-size: 0.62em;
+				font-weight: 600;
 				line-height: 0;
 			}
-			.formula svg {
-				width: 14px;
-				height: 14px;
-				color: rgba(255, 255, 255, 0.55);
+			.frac {
+				display: inline-flex;
+				flex-direction: column;
+				align-items: center;
+				font-size: 16px;
+				line-height: 1.15;
 			}
-			.formula:hover {
-				background: rgba(255, 255, 255, 0.12);
+			.frac > :first-child {
+				padding: 0 3px 2px;
+				border-bottom: 1.5px solid currentColor;
 			}
-			.formula:active {
-				transform: scale(0.97);
+			.frac > :last-child {
+				padding-top: 2px;
 			}
-
-			@keyframes rise-in {
-				from {
-					opacity: 0;
-					transform: translateY(-6px) scale(0.96);
-				}
+			.formula-label {
+				font-size: 13px;
+				font-weight: 500;
+				color: var(--label-tertiary);
+				text-align: right;
+				transition: color 0.15s ease;
 			}
-
-			@media (prefers-reduced-transparency: reduce) {
-				.glass {
-					-webkit-backdrop-filter: none;
-					backdrop-filter: none;
-					background-color: rgba(30, 30, 34, 0.96);
-				}
+			.formula:hover .formula-label {
+				color: var(--label);
 			}
 		</style>
 	</body>

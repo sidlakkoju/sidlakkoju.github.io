@@ -1,3 +1,6 @@
+mod glass;
+
+use glass::{Compositor, GlassShape, GlassStyle};
 use macroquad::prelude::*;
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -83,6 +86,133 @@ pub extern "C" fn remove_body(i: i32) {
 #[no_mangle]
 pub extern "C" fn step_mass(i: i32, dir: i32) {
     WORLD.with_borrow_mut(|w| w.step_mass(i as usize, dir.signum() as f32 * MASS_STEP));
+}
+
+// ---------------------------------------------------------------------------
+// PAGE OVERLAY (web)
+// ---------------------------------------------------------------------------
+//
+// The page hands the renderer everything that has to sit *under* the glass:
+// the headline and social icons (rasterized by the browser so they use the
+// real system font), plus the rects of its glass panels and buttons. That way
+// the glass refracts the name and icons too, not just the planets.
+
+/// Per-body control geometry. Must match the JS in site/src/pages/index.astro.
+const CTL_REMOVE_RADIUS: f32 = 14.0;
+const CTL_STEPPER_HALF: Vec2 = vec2(58.0, 16.0);
+const CTL_GAP: f32 = 14.0;
+
+fn remove_center(b: &Body) -> Vec2 {
+    let o = b.radius * 0.72 + CTL_GAP;
+    b.pos + vec2(o, -o)
+}
+
+fn stepper_center(b: &Body) -> Vec2 {
+    b.pos + vec2(0.0, b.radius + CTL_GAP + CTL_STEPPER_HALF.y)
+}
+
+#[derive(Default)]
+struct Sprite {
+    texture: Option<Texture2D>,
+    // Raw RGBA waiting to become a texture on the next frame.
+    pending: Option<(u16, u16, Vec<u8>)>,
+    dest: Rect,
+    offset: Vec2,
+}
+
+impl Sprite {
+    fn realize(&mut self) {
+        if let Some((w, h, bytes)) = self.pending.take() {
+            let texture = Texture2D::from_rgba8(w, h, &bytes);
+            texture.set_filter(FilterMode::Linear);
+            self.texture = Some(texture);
+        }
+    }
+}
+
+#[derive(Default)]
+struct Overlay {
+    upload: Vec<u8>,
+    hero: Sprite,
+    icons: Sprite,
+    // Where each icon cell of the atlas is drawn, and its opacity.
+    icon_slots: Vec<(Rect, f32)>,
+    glass: Vec<GlassShape>,
+    body_ui_alpha: f32,
+}
+
+thread_local! {
+    static OVERLAY: RefCell<Overlay> = RefCell::new(Overlay::default());
+}
+
+/// Returns a buffer of `len` bytes for JS to write RGBA pixels into, ahead
+/// of `ui_upload`. JS must re-read wasm memory after calling (it may grow).
+#[no_mangle]
+pub extern "C" fn ui_alloc(len: i32) -> *mut u8 {
+    OVERLAY.with_borrow_mut(|o| {
+        o.upload.clear();
+        o.upload.resize(len.max(0) as usize, 0);
+        o.upload.as_mut_ptr()
+    })
+}
+
+/// Turns the uploaded pixels into slot 0 (headline, drawn with difference
+/// blending at x/y/w/h) or slot 1 (icon atlas of square cells).
+#[no_mangle]
+pub extern "C" fn ui_upload(slot: i32, pw: i32, ph: i32, x: f32, y: f32, w: f32, h: f32) {
+    OVERLAY.with_borrow_mut(|o| {
+        let bytes = std::mem::take(&mut o.upload);
+        let sprite = if slot == 0 { &mut o.hero } else { &mut o.icons };
+        sprite.pending = Some((pw as u16, ph as u16, bytes));
+        sprite.dest = Rect::new(x, y, w, h);
+        sprite.offset = Vec2::ZERO;
+    });
+}
+
+/// Moves the uploaded headline without re-rasterizing it (it glides up to
+/// make room for the info card).
+#[no_mangle]
+pub extern "C" fn ui_offset(slot: i32, dx: f32, dy: f32) {
+    OVERLAY.with_borrow_mut(|o| {
+        let sprite = if slot == 0 { &mut o.hero } else { &mut o.icons };
+        sprite.offset = vec2(dx, dy);
+    });
+}
+
+#[no_mangle]
+pub extern "C" fn icon_set(i: i32, x: f32, y: f32, w: f32, h: f32, alpha: f32) {
+    OVERLAY.with_borrow_mut(|o| {
+        let i = i as usize;
+        if o.icon_slots.len() <= i {
+            o.icon_slots.resize(i + 1, (Rect::default(), 0.0));
+        }
+        o.icon_slots[i] = (Rect::new(x, y, w, h), alpha);
+    });
+}
+
+#[no_mangle]
+pub extern "C" fn glass_clear() {
+    OVERLAY.with_borrow_mut(|o| o.glass.clear());
+}
+
+/// Adds a page glass shape (CSS px). `style` 0 = clear control, 1 = frosted panel.
+#[no_mangle]
+pub extern "C" fn glass_push(x: f32, y: f32, w: f32, h: f32, radius: f32, alpha: f32, style: i32) {
+    OVERLAY.with_borrow_mut(|o| {
+        o.glass.push(GlassShape {
+            center: vec2(x + w / 2.0, y + h / 2.0),
+            half: vec2(w / 2.0, h / 2.0),
+            radius,
+            alpha,
+            style: if style == 1 { GlassStyle::Frosted } else { GlassStyle::Clear },
+        });
+    });
+}
+
+/// Opacity of the per-body controls (they fade with pause).
+#[no_mangle]
+pub extern "C" fn set_body_ui_alpha(alpha: f32) {
+    OVERLAY.with_borrow_mut(|o| o.body_ui_alpha = alpha);
 }
 
 // ---------------------------------------------------------------------------
@@ -496,7 +626,12 @@ fn window_conf() -> Conf {
         window_width: 1280,
         window_height: 800,
         high_dpi: true,
-        sample_count: 4,
+        // The scene is drawn into a 4x MSAA render target (see glass.rs),
+        // which needs WebGL2 on the web.
+        platform: miniquad::conf::Platform {
+            webgl_version: miniquad::conf::WebGLVersion::WebGL2,
+            ..Default::default()
+        },
         ..Default::default()
     }
 }
@@ -506,7 +641,7 @@ fn window_conf() -> Conf {
 const SUBSTEPS: u32 = 8;
 
 /// One frame of input, physics, and rendering.
-fn frame(w: &mut World) {
+fn frame(w: &mut World, overlay: &mut Overlay, compositor: &mut Compositor) {
     // If the canvas resized, translate every body by the delta between
     // the old and new center so the system stays visually centered.
     let new_cx = screen_width() / 2.0;
@@ -618,9 +753,26 @@ fn frame(w: &mut World) {
     }
 
     // ----- Render -----
-    clear_background(BLACK);
+    // Scene pass: everything the glass can refract.
+    compositor.begin_scene();
     for body in &w.bodies {
         body.draw();
+    }
+
+    overlay.hero.realize();
+    overlay.icons.realize();
+    if let Some(tex) = &overlay.hero.texture {
+        compositor.draw_difference(tex, overlay.hero.dest.offset(overlay.hero.offset));
+    }
+    if let Some(tex) = &overlay.icons.texture {
+        let cell = tex.height();
+        for (i, &(dest, alpha)) in overlay.icon_slots.iter().enumerate() {
+            draw_texture_ex(tex, dest.x, dest.y, Color::new(1.0, 1.0, 1.0, alpha), DrawTextureParams {
+                dest_size: Some(dest.size()),
+                source: Some(Rect::new(i as f32 * cell, 0.0, cell, cell)),
+                ..Default::default()
+            });
+        }
     }
 
     if paused {
@@ -628,6 +780,35 @@ fn frame(w: &mut World) {
             draw_velocity_arrow(body);
         }
     }
+
+    // Glass pass. Panels first, then per-body controls, then the small page
+    // controls, matching the HTML stacking order.
+    let mut shapes: Vec<GlassShape> = overlay
+        .glass
+        .iter()
+        .filter(|s| matches!(s.style, GlassStyle::Frosted))
+        .copied()
+        .collect();
+    if overlay.body_ui_alpha > 0.001 {
+        for b in &w.bodies {
+            shapes.push(GlassShape {
+                center: remove_center(b),
+                half: Vec2::splat(CTL_REMOVE_RADIUS),
+                radius: CTL_REMOVE_RADIUS,
+                alpha: overlay.body_ui_alpha,
+                style: GlassStyle::Clear,
+            });
+            shapes.push(GlassShape {
+                center: stepper_center(b),
+                half: CTL_STEPPER_HALF,
+                radius: CTL_STEPPER_HALF.y,
+                alpha: overlay.body_ui_alpha,
+                style: GlassStyle::Clear,
+            });
+        }
+    }
+    shapes.extend(overlay.glass.iter().filter(|s| matches!(s.style, GlassStyle::Clear)).copied());
+    compositor.finish(&shapes);
 
     if CANVAS_UI {
         if paused {
@@ -669,8 +850,11 @@ async fn main() {
         next_frame().await;
     }
 
+    let mut compositor = Compositor::new();
     loop {
-        WORLD.with_borrow_mut(frame);
+        WORLD.with_borrow_mut(|world| {
+            OVERLAY.with_borrow_mut(|overlay| frame(world, overlay, &mut compositor))
+        });
         next_frame().await;
     }
 }

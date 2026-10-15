@@ -1,7 +1,8 @@
 [target.wasm32-unknown-unknown]
 # Explicitly export the JS-facing functions so wasm-ld doesn't dead-code-strip
 # them. The page reads them via window.wasm_exports to drive the HTML controls
-# (pause, add/remove body, mass stepper) layered over the canvas.
+# (pause, add/remove body, mass stepper) layered over the canvas, and upload
+# the headline/icons and glass shapes the renderer draws.
 #
 # --allow-undefined lets macroquad's JS-provided functions (WebGL, input,
 # timing) link as wasm imports. Older rustc passed it implicitly; newer
@@ -18,4 +19,11 @@ rustflags = [
     "-C", "link-arg=--export=add_body",
     "-C", "link-arg=--export=remove_body",
     "-C", "link-arg=--export=step_mass",
+    "-C", "link-arg=--export=ui_alloc",
+    "-C", "link-arg=--export=ui_upload",
+    "-C", "link-arg=--export=ui_offset",
+    "-C", "link-arg=--export=icon_set",
+    "-C", "link-arg=--export=glass_clear",
+    "-C", "link-arg=--export=glass_push",
+    "-C", "link-arg=--export=set_body_ui_alpha",
 ]
