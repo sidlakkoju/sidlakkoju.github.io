@@ -56,12 +56,6 @@ export function supportsSvgBackdropFilter(): boolean {
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-function sdRoundBox(px: number, py: number, bx: number, by: number, r: number): number {
-	const qx = Math.abs(px) - bx + r;
-	const qy = Math.abs(py) - by + r;
-	return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
-}
-
 const smoothstep = (a: number, b: number, x: number) => {
 	const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
 	return t * t * (3 - 2 * t);
@@ -77,71 +71,115 @@ interface Maps {
 /** Backdrop sampled around a shape: the rim's reach plus the blur's. */
 const marginFor = (m: GlassMaterial) => Math.ceil(m.refraction * DISPERSION[0] + 3 * BLUR_SIGMA) + 2;
 
+interface Pixels {
+	width: number;
+	height: number;
+	displacement: ImageData;
+	specular: ImageData;
+	margin: number;
+}
+
 /**
- * Builds the displacement and highlight maps for a w x h shape with corner
+ * Computes the displacement and highlight maps for a w x h shape with corner
  * radius r, using glass.rs's lens profile: a circular bevel as wide as the
  * corner radius, refracting outward by up to `refraction` px at the rim.
  * The maps cover the shape plus `margin` on every side, since the rim
  * samples light from just outside the shape.
+ *
+ * The rounded box's distance and normal are evaluated analytically (one
+ * pass per pixel, no Math.hypot): this runs for every glass control on the
+ * page, at device resolution.
  */
-export function buildMaps(w: number, h: number, r: number, material: GlassMaterial, scale = 1): Maps {
+export function computeMaps(w: number, h: number, r: number, material: GlassMaterial, scale = 1): Pixels {
 	const margin = marginFor(material);
-	const W = w + 2 * margin;
-	const H = h + 2 * margin;
-	const pw = Math.max(1, Math.round(W * scale));
-	const ph = Math.max(1, Math.round(H * scale));
-	const disp = new ImageData(pw, ph);
-	const spec = new ImageData(pw, ph);
+	const pw = Math.max(1, Math.round((w + 2 * margin) * scale));
+	const ph = Math.max(1, Math.round((h + 2 * margin) * scale));
+	const displacement = new ImageData(pw, ph);
+	const specular = new ImageData(pw, ph);
+	const disp = displacement.data;
+	const spec = specular.data;
 	const hx = w / 2;
 	const hy = h / 2;
 	const radius = Math.min(r, hx, hy);
 	const bevel = Math.max(radius, 1);
-	const e = 0.35;
-	const [lx, ly] = LIGHT;
-	const ll = Math.hypot(lx, ly);
+	const ex = hx - radius; // half extents of the box the corners round off
+	const ey = hy - radius;
+	const ll = Math.sqrt(LIGHT[0] * LIGHT[0] + LIGHT[1] * LIGHT[1]);
+	const lx = LIGHT[0] / ll;
+	const ly = LIGHT[1] / ll;
 	const px1 = 1 / scale; // one device pixel, CSS px
 
 	for (let j = 0; j < ph; j++) {
 		const py = (j + 0.5) / scale - margin - hy;
+		const sy = py < 0 ? -1 : 1;
+		const qy = sy * py - ey;
 		for (let i = 0; i < pw; i++) {
 			const px = (i + 0.5) / scale - margin - hx;
+			const sx = px < 0 ? -1 : 1;
+			const qx = sx * px - ex;
 			const o = (j * pw + i) * 4;
-			const d = sdRoundBox(px, py, hx, hy, radius);
-			disp.data[o + 3] = 255;
+			disp[o + 3] = 255;
+			// Signed distance to the rounded box, and its outward normal.
+			let d: number;
+			let nx: number;
+			let ny: number;
+			if (qx > 0 && qy > 0) {
+				const l = Math.sqrt(qx * qx + qy * qy);
+				d = l - radius;
+				nx = (sx * qx) / l;
+				ny = (sy * qy) / l;
+			} else if (qx > qy) {
+				d = qx - radius;
+				nx = sx;
+				ny = 0;
+			} else {
+				d = qy - radius;
+				nx = 0;
+				ny = sy;
+			}
 			if (d > px1) {
-				disp.data[o] = disp.data[o + 1] = 128;
+				disp[o] = disp[o + 1] = 128;
 				continue;
 			}
-			let nx = sdRoundBox(px + e, py, hx, hy, radius) - sdRoundBox(px - e, py, hx, hy, radius);
-			let ny = sdRoundBox(px, py + e, hx, hy, radius) - sdRoundBox(px, py - e, hx, hy, radius);
-			const nl = Math.hypot(nx, ny) || 1;
-			nx /= nl;
-			ny /= nl;
 
 			const t = Math.min(1, Math.max(0, -d / bevel));
 			const bend = 1 - Math.sqrt(1 - (1 - t) * (1 - t));
 			// Offset / (2 * refraction) maps +-refraction onto 0..255.
-			disp.data[o] = Math.round(127.5 + 127.5 * nx * bend);
-			disp.data[o + 1] = Math.round(127.5 + 127.5 * ny * bend);
-			disp.data[o + 2] = 128;
+			disp[o] = Math.round(127.5 + 127.5 * nx * bend);
+			disp[o + 1] = Math.round(127.5 + 127.5 * ny * bend);
+			disp[o + 2] = 128;
 
-			const facing = Math.abs((nx * lx + ny * ly) / ll);
-			const s = facing ** 4;
+			const facing = Math.abs(nx * lx + ny * ly);
+			const s2 = facing * facing;
+			const s = s2 * s2;
 			const edge = 1 - smoothstep(0, 1, -d);
-			const light = edge * (0.07 + 0.5 * s) + bend ** 3 * s * 0.18;
-			spec.data[o] = spec.data[o + 1] = spec.data[o + 2] = 255;
-			spec.data[o + 3] = Math.round(Math.min(1, light) * 255);
+			const light = edge * (0.07 + 0.5 * s) + bend * bend * bend * s * 0.18;
+			spec[o] = spec[o + 1] = spec[o + 2] = 255;
+			spec[o + 3] = Math.round(Math.min(1, light) * 255);
 		}
 	}
+	return { width: pw, height: ph, displacement, specular, margin };
+}
 
-	const toUrl = (img: ImageData) => {
-		const c = document.createElement("canvas");
-		c.width = pw;
-		c.height = ph;
-		c.getContext("2d")!.putImageData(img, 0, 0);
-		return c.toDataURL("image/png");
+/**
+ * The maps as image URLs for feImage. PNG encoding runs off the main thread
+ * (canvas.toBlob); the blob URLs live as long as the page.
+ */
+export async function buildMaps(w: number, h: number, r: number, material: GlassMaterial, scale = 1): Promise<Maps> {
+	const px = computeMaps(w, h, r, material, scale);
+	const canvas = document.createElement("canvas");
+	canvas.width = px.width;
+	canvas.height = px.height;
+	const ctx = canvas.getContext("2d")!;
+	const encode = (img: ImageData) => {
+		ctx.putImageData(img, 0, 0);
+		return new Promise<string>((resolve) =>
+			canvas.toBlob((blob) => resolve(blob ? URL.createObjectURL(blob) : canvas.toDataURL("image/png")), "image/png"),
+		);
 	};
-	return { displacement: toUrl(disp), specular: toUrl(spec), margin };
+	const displacement = await encode(px.displacement);
+	const specular = await encode(px.specular);
+	return { displacement, specular, margin: px.margin };
 }
 
 function el<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number>, parent?: Element) {
@@ -197,10 +235,20 @@ export interface LiquidRefraction {
 	disconnect(): void;
 }
 
+/** Runs `fn` when the main thread is idle (soon after load), else after a timeout. */
+function whenIdle(fn: () => void, timeout = 1000) {
+	if ("requestIdleCallback" in window) requestIdleCallback(fn, { timeout });
+	else setTimeout(fn, 50);
+}
+
 /**
  * Turns on refraction for every [data-glass] element under `root`. Safe to
  * call where it's unsupported: it returns an inactive controller and the CSS
  * fallback stays in place.
+ *
+ * Nothing runs on the critical path: the maps are built in idle time once
+ * the page has loaded, one element per idle slice, and each element keeps
+ * the CSS frosted glass until its filter is ready.
  */
 export function initLiquidRefraction(root: ParentNode = document): LiquidRefraction {
 	const elements = [...root.querySelectorAll<HTMLElement>("[data-glass]")];
@@ -212,12 +260,14 @@ export function initLiquidRefraction(root: ParentNode = document): LiquidRefract
 	defs.style.cssText = "position:absolute;width:0;height:0;overflow:hidden;pointer-events:none";
 	document.body.append(defs);
 
-	// One filter per distinct (material, size, radius, resolution).
-	const filters = new Map<string, string>();
+	// One filter per distinct (material, size, radius, resolution), built once.
+	const filters = new Map<string, { id: string; ready: Promise<Maps> }>();
 	const scale = Math.min(window.devicePixelRatio || 1, 2);
 	let n = 0;
+	let connected = true;
 
 	function update(node: HTMLElement) {
+		if (!connected) return;
 		const kind: GlassKind = node.dataset.glass === "clear" ? "clear" : "frosted";
 		const material = GLASS_MATERIALS[kind];
 		// Layout size, untransformed (hover scales mustn't rebuild the map).
@@ -227,19 +277,25 @@ export function initLiquidRefraction(root: ParentNode = document): LiquidRefract
 		const radius = Math.min(parseFloat(getComputedStyle(node).borderTopLeftRadius) || 0, w / 2, h / 2);
 		const key = `${kind}:${w}x${h}:${radius}:${scale}`;
 		if (node.dataset.glassKey === key) return;
-		let id = filters.get(key);
-		const margin = marginFor(material);
-		if (!id) {
-			id = `lg-refract-${n++}`;
-			const maps = buildMaps(w, h, radius, material, scale);
-			defs.append(buildFilter(id, w, h, maps, material));
-			filters.set(key, id);
-		}
 		node.dataset.glassKey = key;
-		node.style.setProperty("--lg-refract-filter", `url(#${id})`);
-		node.style.setProperty("--lg-refract-margin", `${margin}px`);
-		node.style.setProperty("--lg-refract-radius", `${radius}px`);
-		node.setAttribute("data-glass-active", "");
+		let filter = filters.get(key);
+		if (!filter) {
+			const id = `lg-refract-${n++}`;
+			const ready = buildMaps(w, h, radius, material, scale).then((maps) => {
+				defs.append(buildFilter(id, w, h, maps, material));
+				return maps;
+			});
+			filters.set(key, (filter = { id, ready }));
+		}
+		const { id, ready } = filter;
+		ready.then((maps) => {
+			// Superseded by a resize, or switched off, while the maps encoded.
+			if (!connected || node.dataset.glassKey !== key) return;
+			node.style.setProperty("--lg-refract-filter", `url(#${id})`);
+			node.style.setProperty("--lg-refract-margin", `${maps.margin}px`);
+			node.style.setProperty("--lg-refract-radius", `${radius}px`);
+			node.setAttribute("data-glass-active", "");
+		});
 	}
 
 	let queued = new Set<HTMLElement>();
@@ -254,10 +310,19 @@ export function initLiquidRefraction(root: ParentNode = document): LiquidRefract
 			});
 		}
 	});
-	elements.forEach((node) => {
+
+	// After load, one element per idle slice; then watch for size changes.
+	const queue = [...elements];
+	const next = () => {
+		const node = queue.shift();
+		if (!node || !connected) return;
 		update(node);
 		ro.observe(node);
-	});
+		if (queue.length) whenIdle(next);
+	};
+	const begin = () => whenIdle(next);
+	if (document.readyState === "complete") begin();
+	else window.addEventListener("load", begin, { once: true });
 
 	return {
 		active: true,
@@ -268,11 +333,17 @@ export function initLiquidRefraction(root: ParentNode = document): LiquidRefract
 			});
 		},
 		disconnect() {
+			connected = false;
 			ro.disconnect();
 			for (const node of elements) {
 				node.removeAttribute("data-glass-active");
 				delete node.dataset.glassKey;
 				for (const p of ["--lg-refract-filter", "--lg-refract-margin", "--lg-refract-radius"]) node.style.removeProperty(p);
+			}
+			for (const { ready } of filters.values()) {
+				ready.then((maps) => {
+					for (const url of [maps.displacement, maps.specular]) if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+				});
 			}
 			defs.remove();
 		},

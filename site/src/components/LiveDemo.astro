@@ -4,8 +4,9 @@
 // Contract with the demo at /photos-swipe/demo/ (same origin):
 //   - Desktop (>= 700px wide and not touch-first): an inline
 //     <iframe src="/photos-swipe/demo/?embed=1&top=50&scheme=dark"> rendered edge to edge
-//     at 390x844 and scaled into the phone frame. It is created only when the
-//     frame is near the viewport, and its rendering is skipped
+//     at 390x844 and scaled into the phone frame. It is created only once the
+//     page has loaded and gone idle, and the frame is near the viewport
+//     (until then the static preview shows), and its rendering is skipped
 //     (content-visibility) while it's far offscreen; its state is kept.
 //   - top=<pt>: the height of the status bar the page draws over the top of
 //     the iframe (time, Dynamic Island, glyphs; transparent, no touches). The
@@ -21,6 +22,7 @@
 //     "Try the live demo" opens a full-screen sheet with
 //     <iframe src="/photos-swipe/demo/?scheme=dark"> (no embed=1) and a close button. scheme=dark keeps the demo matching the dark site whatever the OS appearance.
 import Icon from "./Icon.astro";
+import ResponsiveImage from "./ResponsiveImage.astro";
 import { links } from "../data/photos-swipe";
 ---
 
@@ -54,13 +56,19 @@ import { links } from "../data/photos-swipe";
 					</svg>
 				</span>
 			</div>
-			<img
+			<!-- A screenshot of the demo as it opens (scripts/images.mjs preview), so
+			     the inline demo fades in over a matching picture. It's the page's
+			     LCP element on every layout: fetched early, never lazy. -->
+			<ResponsiveImage
 				class="phone-preview"
-				src="/photos-swipe/preview.jpg"
-				alt="Photos Swipe on an iPhone: a sunset photo card with keep and trash buttons, and 26.3 MB freed."
+				base="/photos-swipe/preview"
+				widths={[400, 660]}
+				sizes="(max-width: 699px) 200px, 330px"
+				fallback="jpg"
+				alt="Photos Swipe on an iPhone: a Big Sur sunset photo card with Trash and Keep buttons."
 				width="390"
 				height="844"
-				loading="lazy"
+				fetchpriority="high"
 				decoding="async"
 			/>
 			<div class="phone-iframe-host" data-iframe-host></div>
@@ -111,6 +119,11 @@ import { links } from "../data/photos-swipe";
 		const sheetMQ = window.matchMedia(SHEET_MQ);
 		let inline: HTMLIFrameElement | null = null;
 		let near = false;
+		// The inline demo (~330 KB of script, run in this page's process)
+		// waits for the page to load and go idle, so it never competes with
+		// first paint or the preview image. The preview is a screenshot of
+		// the demo's first screen, so the demo fades in over a match.
+		let pageReady = false;
 
 		function makeFrame(url: string, title: string) {
 			const f = document.createElement("iframe");
@@ -123,7 +136,7 @@ import { links } from "../data/photos-swipe";
 
 		// Inline demo: only on desktop, and only once the frame is near view.
 		function syncInline() {
-			const want = near && !sheetMQ.matches;
+			const want = near && pageReady && !sheetMQ.matches;
 			root.classList.toggle("is-inline", !sheetMQ.matches);
 			if (want && !inline) {
 				inline = makeFrame(`${src}?embed=1&top=${STATUS_TOP}&scheme=dark`, "Photos Swipe live demo");
@@ -152,6 +165,16 @@ import { links } from "../data/photos-swipe";
 		).observe(root);
 		sheetMQ.addEventListener("change", syncInline);
 		syncInline();
+		const ready = () => {
+			const go = () => {
+				pageReady = true;
+				syncInline();
+			};
+			if ("requestIdleCallback" in window) requestIdleCallback(go, { timeout: 1500 });
+			else setTimeout(go, 100);
+		};
+		if (document.readyState === "complete") ready();
+		else window.addEventListener("load", ready, { once: true });
 
 		window.addEventListener("message", (e) => {
 			if (e.origin !== location.origin || !inline || e.source !== inline.contentWindow) return;
@@ -174,7 +197,16 @@ import { links } from "../data/photos-swipe";
 		const cover = () => sheet.open && html.classList.add("sheet-covered");
 		sheet.addEventListener("animationend", (e) => e.target === sheet && cover());
 		root.querySelector("[data-open-sheet]")!.addEventListener("click", () => {
-			if (!sheetHost.firstChild) sheetHost.append(makeFrame(`${src}?scheme=dark`, "Photos Swipe live demo"));
+			// The demo is created after the sheet's first frame, so the tap
+			// answers at once and the slide-up starts before the demo's
+			// script is parsed.
+			if (!sheetHost.firstChild) {
+				requestAnimationFrame(() =>
+					setTimeout(() => {
+						if (sheet.open && !sheetHost.firstChild) sheetHost.append(makeFrame(`${src}?scheme=dark`, "Photos Swipe live demo"));
+					}),
+				);
+			}
 			sheet.showModal();
 			// Focus the sheet itself: a ring on the close button the moment it
 			// opens reads as a selected control.
@@ -348,8 +380,14 @@ import { links } from "../data/photos-swipe";
 	}
 	@media (prefers-reduced-motion: no-preference) {
 		.is-inline .coach:not(.is-hidden) {
-			animation: coach-nudge 2.4s ease-in-out infinite;
+			animation: coach-nudge 2.4s ease-in-out 5;
 		}
+	}
+	/* A moving refracting element re-runs its SVG filter every frame on
+	   Chromium's main thread (~7% of a core here), so the nudge plays five
+	   times, not forever, and pauses while the demo is far offscreen. */
+	.demo.is-parked .coach {
+		animation-play-state: paused;
 	}
 	@keyframes coach-nudge {
 		0%, 100% {
