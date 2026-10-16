@@ -35,6 +35,7 @@ export const projects = [
 		href: "/photos-swipe/",
 		title: "Photos Swipe",
 		tagline: "Swipe to clean up Google Photos",
-		icon: "/photos-swipe/icon.png",
+		/** Responsive variants: public/photos-swipe/icon-{64,128,192,288}.{avif,webp,png}. */
+		icon: "/photos-swipe/icon",
 	},
 ];

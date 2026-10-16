@@ -1,0 +1,26 @@
+---
+// A <picture> for images pre-sized by scripts/images.mjs: AVIF, then WebP,
+// then a PNG/JPEG fallback, each at every width in `widths`
+// (`${base}-${w}.${format}`). Other attributes go on the <img>.
+// The <picture> is display: contents, so the <img> lays out (and is styled)
+// as if it stood alone.
+import type { HTMLAttributes } from "astro/types";
+
+interface Props extends Omit<HTMLAttributes<"img">, "src" | "srcset" | "sizes"> {
+	/** Path without the size and extension, e.g. "/photos-swipe/icon". */
+	base: string;
+	widths: number[];
+	/** Rendered width in CSS px, as a `sizes` value. */
+	sizes: string;
+	fallback: "png" | "jpg";
+}
+
+const { base, widths, sizes, fallback, ...img } = Astro.props;
+const srcset = (ext: string) => widths.map((w) => `${base}-${w}.${ext} ${w}w`).join(", ");
+---
+
+<picture style="display: contents">
+	<source type="image/avif" srcset={srcset("avif")} sizes={sizes} />
+	<source type="image/webp" srcset={srcset("webp")} sizes={sizes} />
+	<img src={`${base}-${widths[widths.length - 1]}.${fallback}`} srcset={srcset(fallback)} sizes={sizes} {...img} />
+</picture>

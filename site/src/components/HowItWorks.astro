@@ -2,6 +2,7 @@
 // "How it works" animated diagram (Figma component 15:996, storyboard 16:691).
 // All copy comes from src/data/photos-swipe.ts; geometry lives here.
 import Icon from "./Icon.astro";
+import ResponsiveImage from "./ResponsiveImage.astro";
 import { diagram, type NodeId, type LabelId, type RouteId } from "../data/photos-swipe";
 
 const { nodes, labels, steps } = diagram;
@@ -163,7 +164,7 @@ const isActive = (id: NodeId) => first.active.includes(id);
 								style={`left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px`}
 							>
 								{n.glyph === "app" ? (
-									<img class="hiw-appicon" src="/photos-swipe/icon.png" alt="" width="52" height="52" />
+									<ResponsiveImage class="hiw-appicon" base="/photos-swipe/icon" widths={[64, 128, 192]} sizes="52px" fallback="png" alt="" width="52" height="52" loading="lazy" decoding="async" />
 								) : (
 									<span class="hiw-glyph">
 										<Icon name={glyphIcon(n.glyph)} size={22} />
@@ -226,7 +227,7 @@ const isActive = (id: NodeId) => first.active.includes(id);
 						) : (
 							<div class:list={["hiw-m-node", isActive(item) && "is-active"]} data-node={item}>
 								{nodes[item].glyph === "app" ? (
-									<img class="hiw-m-icon" src="/photos-swipe/icon.png" alt="" width="32" height="32" />
+									<ResponsiveImage class="hiw-m-icon" base="/photos-swipe/icon" widths={[64, 128]} sizes="32px" fallback="png" alt="" width="32" height="32" loading="lazy" decoding="async" />
 								) : (
 									<span class="hiw-m-icon">
 										<Icon name={glyphIcon(nodes[item].glyph)} size={17} />

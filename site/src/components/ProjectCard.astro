@@ -1,8 +1,11 @@
 ---
+import ResponsiveImage from "./ResponsiveImage.astro";
+
 interface Props {
 	href: string;
 	title: string;
 	tagline: string;
+	/** Base path of the icon's responsive variants (scripts/images.mjs). */
 	icon: string;
 	/** Shared with the project page's icon so it morphs across the navigation. */
 	transitionName?: string;
@@ -12,9 +15,12 @@ const { href, title, tagline, icon, transitionName, class: className } = Astro.p
 ---
 
 <a class:list={["project-card", "lg-glass-regular", className]} href={href} data-glass="frosted">
-	<img
+	<ResponsiveImage
 		class="project-card__icon"
-		src={icon}
+		base={icon}
+		widths={[64, 128, 192, 288]}
+		sizes="56px"
+		fallback="png"
 		alt=""
 		width="56"
 		height="56"
