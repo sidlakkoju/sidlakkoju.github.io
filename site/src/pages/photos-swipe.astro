@@ -3,8 +3,9 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import Icon from "../components/Icon.astro";
 import LiveDemo from "../components/LiveDemo.astro";
 import HowItWorks from "../components/HowItWorks.astro";
+import InstallModal from "../components/InstallModal.astro";
 import { name, siteUrl, socialIcons } from "../data/site";
-import { intro, links, features, installSteps } from "../data/photos-swipe";
+import { intro, links, installSteps } from "../data/photos-swipe";
 
 const url = new URL("/photos-swipe/", siteUrl).href;
 const title = "Photos Swipe: swipe to clean up Google Photos";
@@ -72,9 +73,6 @@ const structuredData = {
 				<Icon name="arrow-left" size={16} />
 				{name}
 			</a>
-			<a class="lg-icon-button lg-glass-clear" href={links.github} target="_blank" rel="noopener noreferrer" aria-label="Photos Swipe on GitHub">
-				<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d={github.path} /></svg>
-			</a>
 		</header>
 
 		<main class="ps-main">
@@ -84,7 +82,7 @@ const structuredData = {
 					<h1 id="ps-title" class="ps-title">{intro.title}</h1>
 					<p class="ps-lede">{intro.lede}</p>
 					<div class="ps-ctas">
-						<a class="lg-button lg-button--primary" href={links.install}>
+						<a class="lg-button lg-button--primary" href={links.install} data-install-open>
 							<Icon name="download" />
 							Install
 						</a>
@@ -101,31 +99,13 @@ const structuredData = {
 				</div>
 			</section>
 
-			<section class="ps-features" aria-label="Features">
-				<ul role="list">
-					{
-						features.map((f) => (
-							<li class="ps-feature lg-glass-regular">
-								<span class="ps-bubble">
-									<Icon name={f.icon} size={20} />
-								</span>
-								<span class="ps-feature-text">
-									<span class="lg-headline">{f.title}</span>
-									<span class="ps-feature-desc">{f.text}</span>
-								</span>
-							</li>
-						))
-					}
-				</ul>
-			</section>
-
 			<HowItWorks />
 
 			<section class="ps-install" id="install" aria-labelledby="install-title">
 				<div class="ps-install-card lg-glass-regular">
 					<div class="ps-install-head">
 						<h2 id="install-title">Install</h2>
-						<a class="lg-button lg-button--primary lg-button--small ps-install-btn" href={links.install}>
+						<a class="lg-button lg-button--primary lg-button--small ps-install-btn" href={links.install} data-install-open>
 							<Icon name="download" size={17} />
 							Install
 						</a>
@@ -143,7 +123,7 @@ const structuredData = {
 							))
 						}
 					</ol>
-					<a class="lg-button lg-button--primary ps-install-btn--wide" href={links.install}>
+					<a class="lg-button lg-button--primary ps-install-btn--wide" href={links.install} data-install-open>
 						<Icon name="download" />
 						Install
 					</a>
@@ -166,6 +146,8 @@ const structuredData = {
 			<p>{name} · <a href="/">sidlakkoju.github.io</a></p>
 		</footer>
 	</div>
+
+	<InstallModal />
 </BaseLayout>
 
 <style is:global>
@@ -264,12 +246,7 @@ const structuredData = {
 	.ps-nav {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
 		padding-top: max(28px, calc(var(--lg-safe-top) + 12px));
-	}
-	.ps-nav .lg-icon-button svg {
-		width: 20px;
-		height: 20px;
 	}
 	.ps-nav .lg-chip {
 		padding: 0 16px 0 12px;
@@ -328,40 +305,13 @@ const structuredData = {
 		padding-top: 48px;
 	}
 
-	/* ---- Features ---- */
-	.ps-features ul {
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 20px;
-		margin: 96px 0 0;
-		padding: 0;
-		list-style: none;
-	}
-	.ps-feature {
-		display: flex;
-		align-items: center;
-		gap: 16px;
-		padding: 23px;
-		border-radius: var(--lg-radius-lg);
-	}
-	.ps-bubble {
-		flex: none;
-		display: grid;
-		place-items: center;
-		width: 44px;
-		height: 44px;
-		border-radius: 50%;
-		background: var(--lg-glass-fill-strong);
-		box-shadow: inset 0 0 0 1px var(--lg-glass-stroke);
-	}
-	.ps-feature-text,
+	/* ---- Install steps ---- */
 	.ps-step-text {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
 		min-width: 0;
 	}
-	.ps-feature-desc,
 	.ps-step-desc {
 		font-size: 15px;
 		line-height: 20px;
@@ -503,10 +453,6 @@ const structuredData = {
 		.ps-demo {
 			padding-top: 8px;
 		}
-		.ps-features ul {
-			grid-template-columns: minmax(0, 1fr);
-			gap: 12px;
-		}
 	}
 
 	/* ---- Phones ---- */
@@ -560,18 +506,6 @@ const structuredData = {
 		.ps-demo :global(.phone) {
 			--phone-scale: 0.513;
 			--bezel: 6px;
-		}
-		.ps-features ul {
-			margin-top: 28px;
-			gap: 10px;
-		}
-		.ps-feature {
-			padding: 17px;
-			gap: 14px;
-		}
-		.ps-bubble {
-			width: 40px;
-			height: 40px;
 		}
 		.ps-main :global(.hiw) {
 			margin-top: 48px;

@@ -1,0 +1,1159 @@
+---
+// Install guide for Photos Swipe, opened by every link marked
+// [data-install-open]. Those links point at the .user.js file, so without JS
+// (or with a modified click) they still install directly.
+//
+// Geometry: every rounded element near a rounded container's corner is
+// concentric with it (radius = container radius - inset, equal x/y inset):
+//   sheet 40 / padding 20  -> close button 40px circle at 20,20
+//   step card 32 / padding 16 -> step number 32px circle, chips and pills
+//     32px tall (r16), full-width buttons and callouts r16, all at inset 16
+import Icon from "./Icon.astro";
+import { installGuide as g, links } from "../data/photos-swipe";
+
+const hintFor = {
+	all: g.steps.script.hint.all,
+	"chrome edge": g.steps.script.hint.tampermonkey,
+	firefox: g.steps.script.hint.firefox,
+	safari: g.steps.script.hint.safari,
+	ios: g.steps.script.hint.ios,
+};
+const allRows = g.platforms.flatMap((p) => p.managers.map((m) => ({ platform: p.chip, ...m })));
+const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidlakkoju", "// @match https://photos.google.com/*", "// @grant GM.getValue"];
+---
+
+<dialog class="im" data-install-modal aria-labelledby="im-title" aria-describedby="im-sub">
+	<div class="im-sheet lg-glass-thick" data-platform="all">
+		<header class="im-head">
+			<div class="im-heading">
+				<h2 id="im-title" class="im-title">{g.title}</h2>
+				<p id="im-sub" class="im-sub">{g.subtitle}</p>
+			</div>
+			<button type="button" class="im-close lg-icon-button" data-install-close aria-label="Close">
+				<Icon name="close" size={18} />
+			</button>
+		</header>
+
+		<div class="im-body">
+			<ol class="im-steps" role="list">
+				<!-- Step 1: userscript manager -->
+				<li class="im-card">
+					<div class="im-card-head">
+						<span class="im-num" aria-hidden="true">1</span>
+						<h3 class="im-card-title">{g.steps.manager}</h3>
+					</div>
+
+					<div class="im-picker" role="group" aria-label={g.pickerLabel}>
+						{
+							g.platforms.map((p) => (
+								<button type="button" class="im-chip" data-pick={p.id} aria-pressed="false">
+									{p.chip}
+								</button>
+							))
+						}
+					</div>
+
+					<p class="im-ios-warn im-callout" data-ios-warn hidden>
+						<Icon name="info" size={16} />
+						<span>{g.iosNotSafari}</span>
+					</p>
+
+					{
+						g.platforms.map((p) => (
+							<div class="im-platform" data-show={p.id} hidden>
+								<p class="im-blurb">
+									<span class="im-detected" data-detected hidden>Detected · </span>
+									{p.blurb}
+								</p>
+								<ul class="im-rows" role="list">
+									{p.managers.map((m, i) => (
+										<li class="im-row">
+											<span class="im-row-text">
+												<span class="im-row-name">
+													{m.name}
+													{i === 0 && p.managers.length > 1 && <span class="im-tag">Recommended</span>}
+												</span>
+												<span class="im-row-sub">{m.store}</span>
+											</span>
+											<a
+												class:list={["im-pill", i === 0 ? "im-pill--primary" : "im-pill--glass"]}
+												href={m.href}
+												target="_blank"
+												rel="noopener noreferrer"
+												aria-label={`Get ${m.name} from the ${m.store.split(" · ")[0]}`}
+											>
+												Get
+												<Icon name="external" size={14} />
+											</a>
+										</li>
+									))}
+								</ul>
+								{p.note && (
+									<p class="im-callout">
+										<Icon name="info" size={16} />
+										<span>{p.note}</span>
+									</p>
+								)}
+							</div>
+						))
+					}
+
+					<div class="im-platform" data-show="all">
+						<p class="im-blurb">{g.allLabel} above for setup tips, or get a manager here.</p>
+						<ul class="im-rows" role="list">
+							{
+								allRows.map((r) => (
+									<li class="im-row">
+										<span class="im-row-text">
+											<span class="im-row-name">{r.platform}</span>
+											<span class="im-row-sub">
+												{r.name} · {r.store}
+											</span>
+										</span>
+										<a
+											class="im-pill im-pill--glass"
+											href={r.href}
+											target="_blank"
+											rel="noopener noreferrer"
+											aria-label={`Get ${r.name} for ${r.platform}`}
+										>
+											Get
+											<Icon name="external" size={14} />
+										</a>
+									</li>
+								))
+							}
+						</ul>
+					</div>
+				</li>
+
+				<!-- Step 2: the script -->
+				<li class="im-card">
+					<div class="im-card-head">
+						<span class="im-num" aria-hidden="true">2</span>
+						<h3 class="im-card-title">{g.steps.script.title}</h3>
+					</div>
+					{
+						Object.entries(hintFor).map(([show, text]) => (
+							<p class="im-text" data-show={show} hidden={show !== "all"}>
+								{text}
+							</p>
+						))
+					}
+
+					<!-- Desktop managers: Tampermonkey's install page -->
+					<div
+						class="im-vis im-vis--window"
+						data-show="all chrome edge firefox"
+						role="img"
+						aria-label="Illustration: a browser tab showing Tampermonkey's install page for Photos Swipe, with the Install button highlighted."
+					>
+						<div class="vw-bar" aria-hidden="true">
+							<span class="vw-dots"><i></i><i></i><i></i></span>
+							<span class="vw-url">Tampermonkey · Userscript installation</span>
+						</div>
+						<div class="vw-page tm" aria-hidden="true">
+							<div class="tm-head">
+								<span class="tm-icon"><Icon name="braces" size={16} /></span>
+								<span class="tm-name">
+									<b>Photos Swipe</b>
+									<span>by sidlakkoju · photos.google.com</span>
+								</span>
+							</div>
+							<div class="tm-actions">
+								<span class="vis-btn vis-btn--primary vis-target">
+									Install
+									<svg class="vis-cursor" viewBox="0 0 16 22" width="16" height="22">
+										<path d="M1 1v16.5l4.2-4 2.9 6.9 2.9-1.2-2.9-6.8h5.8Z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round" />
+									</svg>
+								</span>
+								<span class="vis-btn">Cancel</span>
+							</div>
+							<code class="vis-code">{metadata.map((l) => <span>{l}</span>)}</code>
+						</div>
+					</div>
+
+					<!-- Safari on Mac: the Userscripts toolbar popup -->
+					<div
+						class="im-vis im-vis--window"
+						data-show="safari"
+						hidden
+						role="img"
+						aria-label="Illustration: Safari showing the script, with the Userscripts toolbar popup open and its Install button highlighted."
+					>
+						<div class="vw-bar" aria-hidden="true">
+							<span class="vw-dots"><i></i><i></i><i></i></span>
+							<span class="vw-url">photoswiper.user.js</span>
+							<span class="vw-ext">&lt;/&gt;</span>
+						</div>
+						<div class="vw-page" aria-hidden="true">
+							<code class="vis-code">{metadata.map((l) => <span>{l}</span>)}</code>
+							<div class="us-pop us-pop--mac">
+								<span class="us-banner">Userscript Detected: <b>Click to install</b></span>
+								<b class="us-name">Photos Swipe</b>
+								<span class="us-meta">@match https://photos.google.com/*</span>
+								<span class="us-buttons">
+									<span class="vis-btn">Cancel</span>
+									<span class="vis-btn vis-btn--primary vis-target">
+										Install
+										<svg class="vis-cursor" viewBox="0 0 16 22" width="16" height="22">
+											<path d="M1 1v16.5l4.2-4 2.9 6.9 2.9-1.2-2.9-6.8h5.8Z" fill="#fff" stroke="#000" stroke-width="1.2" stroke-linejoin="round" />
+										</svg>
+									</span>
+								</span>
+							</div>
+						</div>
+					</div>
+
+					<!-- iPhone and iPad: the Userscripts popup in Safari -->
+					<div
+						class="im-vis im-vis--phone"
+						data-show="ios"
+						hidden
+						role="img"
+						aria-label="Illustration: Safari on iPhone with the Userscripts popup open, showing Userscript Detected: Tap to install, and its Install button highlighted."
+					>
+						<div class="ph" aria-hidden="true">
+							<div class="ph-screen">
+								<code class="vis-code">{metadata.slice(0, 4).map((l) => <span>{l}</span>)}</code>
+								<div class="us-pop us-pop--ios">
+									<span class="us-title">Userscripts</span>
+									<span class="us-banner">Userscript Detected: <b>Tap to install</b></span>
+									<b class="us-name">Photos Swipe</b>
+									<span class="us-meta">@match https://photos.google.com/*</span>
+									<span class="us-buttons">
+										<span class="vis-btn">Cancel</span>
+										<span class="vis-btn vis-btn--primary vis-target">
+											Install
+											<span class="vis-tap"></span>
+										</span>
+									</span>
+								</div>
+								<div class="ph-bar">
+									<span class="ph-ext">
+										<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+											<path d="M19.4 13a2.5 2.5 0 0 0 0-2H18V7a1 1 0 0 0-1-1h-4V4.6a2.5 2.5 0 0 0-2 0V6H7a1 1 0 0 0-1 1v3.5h1.5a2.5 2.5 0 0 1 0 5H6V17a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-4Z" />
+										</svg>
+									</span>
+									<span class="ph-url">photoswiper.user.js</span>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<a class="im-cta" href={links.install} data-install-script>
+						<Icon name="download" size={18} />
+						{g.steps.script.button}
+					</a>
+				</li>
+
+				<!-- Step 3: open Google Photos -->
+				<li class="im-card im-card--row">
+					<span class="im-num" aria-hidden="true">3</span>
+					<p class="im-open-text">
+						<span class="lg-visually-hidden">Step 3: </span>{g.steps.open.title}
+						<span class="im-open-extra" data-show="ios" hidden>{g.steps.open.iosExtra}</span>
+					</p>
+					<a class="im-pill im-pill--glass" href={g.steps.open.href} target="_blank" rel="noopener noreferrer" aria-label="Open Google Photos">
+						{g.steps.open.button}
+						<Icon name="external" size={14} />
+					</a>
+				</li>
+			</ol>
+
+			<p class="im-safety">
+				<Icon name="shield" size={15} />
+				<span>
+					{g.safety.text} · <a href={g.safety.href} target="_blank" rel="noopener noreferrer">{g.safety.link}</a>
+				</span>
+			</p>
+		</div>
+	</div>
+</dialog>
+
+<script>
+	type Platform = "chrome" | "edge" | "firefox" | "safari" | "ios" | "all";
+
+	// Best-effort detection. Anything unrecognized (Android, unusual
+	// browsers) falls back to "all", which lists every option.
+	function detect(): { platform: Platform; iosNotSafari: boolean } {
+		const ua = navigator.userAgent;
+		const iOS = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+		if (iOS) return { platform: "ios", iosNotSafari: /CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(ua) };
+		if (/Android/i.test(ua)) return { platform: "all", iosNotSafari: false };
+		if (/Edg\//.test(ua)) return { platform: "edge", iosNotSafari: false };
+		if (/Firefox\//.test(ua)) return { platform: "firefox", iosNotSafari: false };
+		if (/Chrome\/|Chromium\//.test(ua)) return { platform: "chrome", iosNotSafari: false };
+		if (/Macintosh/.test(ua) && /Version\/[\d.]+.*Safari\//.test(ua)) return { platform: "safari", iosNotSafari: false };
+		return { platform: "all", iosNotSafari: false };
+	}
+
+	const dialog = document.querySelector<HTMLDialogElement>("[data-install-modal]");
+	if (dialog && typeof dialog.showModal === "function") {
+		const sheet = dialog.querySelector<HTMLElement>(".im-sheet")!;
+		const detected = detect();
+		let returnFocus: HTMLElement | null = null;
+
+		function setPlatform(platform: Platform) {
+			sheet.dataset.platform = platform;
+			for (const el of dialog!.querySelectorAll<HTMLElement>("[data-show]")) {
+				el.hidden = !el.dataset.show!.split(" ").includes(platform);
+			}
+			for (const chip of dialog!.querySelectorAll<HTMLElement>("[data-pick]")) {
+				chip.setAttribute("aria-pressed", String(chip.dataset.pick === platform));
+			}
+			for (const el of dialog!.querySelectorAll<HTMLElement>("[data-detected]")) {
+				el.hidden = platform !== detected.platform;
+			}
+			dialog!.querySelector<HTMLElement>("[data-ios-warn]")!.hidden = !(platform === "ios" && detected.iosNotSafari);
+		}
+
+		dialog.querySelector(".im-picker")!.addEventListener("click", (e) => {
+			const chip = (e.target as HTMLElement).closest<HTMLElement>("[data-pick]");
+			if (chip) setPlatform(chip.dataset.pick as Platform);
+		});
+
+		function open(opener: HTMLElement | null) {
+			returnFocus = opener;
+			setPlatform(detected.platform);
+			dialog!.showModal();
+			document.documentElement.classList.add("install-open");
+			dialog!.querySelector<HTMLElement>(".im-body")!.scrollTop = 0;
+		}
+
+		for (const link of document.querySelectorAll<HTMLAnchorElement>("[data-install-open]")) {
+			link.setAttribute("aria-haspopup", "dialog");
+			link.addEventListener("click", (e) => {
+				// Let modified clicks (new tab, download) go straight to the script.
+				if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+				e.preventDefault();
+				open(link);
+			});
+		}
+
+		dialog.querySelector("[data-install-close]")!.addEventListener("click", () => dialog.close());
+
+		// Backdrop: a press that starts and ends outside the sheet.
+		let downOutside = false;
+		const outside = (e: MouseEvent) => {
+			const r = sheet.getBoundingClientRect();
+			return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+		};
+		dialog.addEventListener("pointerdown", (e) => (downOutside = outside(e)));
+		dialog.addEventListener("click", (e) => {
+			if (downOutside && outside(e)) dialog.close();
+			downOutside = false;
+		});
+
+		// Keep Tab and Shift+Tab inside the dialog.
+		dialog.addEventListener("keydown", (e) => {
+			if (e.key !== "Tab") return;
+			const items = [...dialog.querySelectorAll<HTMLElement>("a[href], button:not([disabled])")].filter(
+				(el) => el.offsetParent !== null || el.getClientRects().length > 0,
+			);
+			if (!items.length) return;
+			const first = items[0];
+			const last = items[items.length - 1];
+			const active = document.activeElement;
+			if (e.shiftKey && (active === first || !dialog.contains(active))) {
+				e.preventDefault();
+				last.focus();
+			} else if (!e.shiftKey && (active === last || !dialog.contains(active))) {
+				e.preventDefault();
+				first.focus();
+			}
+		});
+
+		dialog.addEventListener("close", () => {
+			document.documentElement.classList.remove("install-open");
+			returnFocus?.focus();
+			returnFocus = null;
+		});
+	}
+</script>
+
+<style>
+	/* ---- Dialog shell ---- */
+	.im {
+		--sheet-r: var(--lg-radius-xl); /* 40 */
+		--sheet-pad: 20px;
+		--card-r: 32px;
+		--card-pad: 16px;
+		--inner-r: calc(var(--card-r) - var(--card-pad)); /* 16 */
+		box-sizing: border-box;
+		width: min(600px, 100% - 48px);
+		max-width: none;
+		max-height: calc(100dvh - 48px);
+		margin: auto;
+		padding: 0;
+		border: 0;
+		overflow: visible;
+		background: transparent;
+		color: var(--lg-label);
+		font-family: var(--lg-font-text);
+	}
+	.im::backdrop {
+		background: rgba(0, 0, 0, 0.55);
+	}
+	.im[open] {
+		display: flex;
+	}
+	.im-sheet {
+		display: flex;
+		flex-direction: column;
+		box-sizing: border-box;
+		width: 100%;
+		max-height: inherit;
+		border-radius: var(--sheet-r);
+		overflow: hidden;
+		/* Deeper than the shared Thick fill so text stays legible over the page. */
+		background-color: rgba(40, 40, 46, 0.72);
+	}
+	@media (prefers-reduced-motion: no-preference) {
+		.im[open] .im-sheet {
+			animation: im-in 0.42s var(--lg-ease-spring);
+		}
+		.im[open]::backdrop {
+			animation: im-fade 0.3s ease;
+		}
+	}
+	@keyframes im-in {
+		from {
+			opacity: 0;
+			transform: translateY(16px) scale(0.97);
+		}
+	}
+	@keyframes im-fade {
+		from {
+			opacity: 0;
+		}
+	}
+	:global(html.install-open) {
+		overflow: hidden;
+	}
+
+	/* ---- Header: close button concentric with the sheet's corner ---- */
+	.im-head {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		flex: none;
+		padding: var(--sheet-pad) var(--sheet-pad) 0;
+	}
+	.im-heading {
+		flex: 1;
+		min-width: 0;
+		padding: 0 0 0 4px;
+	}
+	.im-title {
+		margin: 0;
+		font-family: var(--lg-font-display);
+		font-size: 24px;
+		line-height: 40px; /* centers on the 40px close button */
+		font-weight: 700;
+		letter-spacing: -0.4px;
+	}
+	.im-sub {
+		margin: 0;
+		font-size: 15px;
+		line-height: 20px;
+		letter-spacing: -0.2px;
+		color: var(--lg-label-secondary);
+	}
+	.im-close {
+		flex: none;
+		width: calc(2 * (var(--sheet-r) - var(--sheet-pad))); /* 40 */
+		height: calc(2 * (var(--sheet-r) - var(--sheet-pad)));
+		padding: 0;
+		border: 0;
+		background: var(--lg-glass-fill-strong);
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+		cursor: pointer;
+	}
+	.im-close:hover {
+		background: rgba(255, 255, 255, 0.22);
+	}
+
+	/* ---- Body ---- */
+	.im-body {
+		flex: 1 1 auto;
+		min-height: 0;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		padding: 16px var(--sheet-pad) var(--sheet-pad);
+		scrollbar-width: thin;
+		scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+		/* Content scrolling past the header or the sheet's bottom edge fades
+		   out instead of being cut (both fades sit inside the body padding). */
+		-webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent);
+		mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent);
+	}
+	.im-steps {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 12px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	/* Wide screens: steps 1 and 2 side by side, step 3 across. */
+	@media (min-width: 960px) {
+		.im {
+			width: min(880px, 100% - 48px);
+		}
+		.im-steps {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.im-steps > :last-child {
+			grid-column: 1 / -1;
+		}
+	}
+	.im-card {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		padding: var(--card-pad);
+		border-radius: var(--card-r);
+		background: rgba(255, 255, 255, 0.06);
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+	}
+	.im-card-head {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+	.im-num {
+		flex: none;
+		display: grid;
+		place-items: center;
+		width: calc(2 * var(--inner-r)); /* 32 */
+		height: calc(2 * var(--inner-r));
+		border-radius: 50%;
+		background: var(--lg-tint-blue);
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+		font-size: 15px;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+	}
+	.im-card-title {
+		margin: 0;
+		font-size: 17px;
+		line-height: 22px;
+		font-weight: 600;
+		letter-spacing: -0.4px;
+	}
+	.im-text,
+	.im-blurb {
+		margin: 0;
+		font-size: 15px;
+		line-height: 20px;
+		letter-spacing: -0.2px;
+		color: var(--lg-label-secondary);
+		text-wrap: pretty;
+	}
+	.im-detected {
+		color: var(--lg-label);
+		font-weight: 600;
+	}
+	[hidden] {
+		display: none !important;
+	}
+
+	/* ---- Platform picker ---- */
+	.im-picker {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	.im-chip,
+	.im-pill {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+		box-sizing: border-box;
+		height: calc(2 * var(--inner-r)); /* 32 */
+		padding: 0 12px;
+		border: 0;
+		border-radius: var(--inner-r);
+		color: var(--lg-label);
+		font: 500 14px/18px var(--lg-font-text);
+		letter-spacing: -0.15px;
+		text-decoration: none;
+		white-space: nowrap;
+		cursor: pointer;
+		transition: transform 0.35s var(--lg-ease-spring), background-color 0.2s ease;
+	}
+	.im-chip {
+		background: rgba(255, 255, 255, 0.08);
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+	}
+	.im-chip:hover {
+		background: rgba(255, 255, 255, 0.16);
+	}
+	.im-chip[aria-pressed="true"] {
+		background: var(--lg-tint-blue);
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+	}
+	.im-chip:active,
+	.im-pill:active,
+	.im-cta:active {
+		transform: scale(0.96);
+	}
+
+	/* ---- Manager rows ---- */
+	.im-platform {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+	.im-rows {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	/* Rows are as tall as their 32px pill, so a pill in the last row sits
+	   at an equal 16px inset from the card's bottom-right corner. */
+	.im-row {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		min-height: 32px;
+	}
+	.im-row + .im-row {
+		padding-top: 8px;
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+	}
+	.im-row-text {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-width: 0;
+	}
+	.im-row-name {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 15px;
+		line-height: 18px;
+		font-weight: 600;
+		letter-spacing: -0.2px;
+	}
+	.im-row-sub {
+		font-size: 13px;
+		line-height: 14px;
+		color: var(--lg-label-secondary);
+	}
+	.im-tag {
+		padding: 1px 6px;
+		border-radius: 6px;
+		background: rgba(10, 132, 255, 0.22);
+		color: #8cc4ff;
+		font-size: 11px;
+		line-height: 14px;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+	}
+	.im-pill {
+		flex: none;
+		padding: 0 12px 0 14px;
+	}
+	.im-pill--primary {
+		background: var(--lg-tint-blue);
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+	}
+	.im-pill--primary:hover {
+		background: rgba(10, 132, 255, 0.78);
+	}
+	.im-pill--glass {
+		background: rgba(255, 255, 255, 0.1);
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+	}
+	.im-pill--glass:hover {
+		background: rgba(255, 255, 255, 0.18);
+	}
+
+	/* Sub-step callout: the crucial extra toggle. */
+	.im-callout {
+		display: flex;
+		align-items: flex-start;
+		gap: 8px;
+		margin: 0;
+		padding: 12px;
+		border-radius: var(--inner-r);
+		background: rgba(255, 214, 10, 0.1);
+		box-shadow: inset 0 0 0 1px rgba(255, 214, 10, 0.2);
+		color: rgba(255, 244, 214, 0.92);
+		font-size: 14px;
+		line-height: 19px;
+		letter-spacing: -0.1px;
+		text-wrap: pretty;
+	}
+	.im-callout :global(svg) {
+		flex: none;
+		margin-top: 1.5px;
+		color: #ffd60a;
+	}
+
+	/* ---- Step 2 button ---- */
+	.im-cta {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		height: 48px;
+		border-radius: var(--inner-r);
+		background: var(--lg-tint-blue);
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+		color: var(--lg-label);
+		font: 600 17px/22px var(--lg-font-text);
+		letter-spacing: -0.4px;
+		text-decoration: none;
+		transition: transform 0.35s var(--lg-ease-spring), background-color 0.2s ease;
+	}
+	.im-cta:hover {
+		background: rgba(10, 132, 255, 0.78);
+	}
+
+	/* ---- Step 3 ---- */
+	.im-card--row {
+		flex-direction: row;
+		align-items: flex-start;
+		gap: 12px;
+	}
+	.im-open-text {
+		flex: 1;
+		min-width: 0;
+		margin: 0;
+		padding-top: 5px;
+		font-size: 15px;
+		line-height: 22px;
+		letter-spacing: -0.2px;
+		text-wrap: pretty;
+	}
+	.im-open-extra {
+		display: block;
+		color: var(--lg-label-secondary);
+	}
+
+	/* ---- Safety line ---- */
+	.im-safety {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		margin: 16px 0 0;
+		font-size: 13px;
+		line-height: 18px;
+		color: var(--lg-label-secondary);
+	}
+	.im-safety a {
+		color: var(--lg-label);
+		text-decoration: underline;
+		text-decoration-color: rgba(255, 255, 255, 0.35);
+		text-underline-offset: 2px;
+		border-radius: 4px;
+	}
+	.im-safety a:hover {
+		text-decoration-color: currentColor;
+	}
+
+	.im :is(.im-chip, .im-pill, .im-cta, .im-safety a):focus-visible {
+		outline: 2px solid var(--lg-label);
+		outline-offset: 2px;
+	}
+
+	/* ---- Illustrations ---- */
+	.im-vis {
+		position: relative;
+		overflow: hidden;
+		border-radius: var(--inner-r);
+		background: #1b1c20;
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+		font-family: var(--lg-font-text);
+		-webkit-user-select: none;
+		user-select: none;
+	}
+	.vis-code {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		font: 11px/15px ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+		color: rgba(235, 235, 245, 0.4);
+		white-space: nowrap;
+	}
+	.vis-btn {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		height: 26px;
+		padding: 0 14px;
+		border-radius: 6px;
+		background: rgba(255, 255, 255, 0.12);
+		font-size: 12px;
+		font-weight: 600;
+		color: rgba(255, 255, 255, 0.85);
+	}
+	.vis-btn--primary {
+		background: var(--lg-accent-blue);
+		color: #fff;
+	}
+	/* Pulsing ring, concentric with the 6px button (4px out -> 10px). */
+	.vis-target::before {
+		content: "";
+		position: absolute;
+		inset: -4px;
+		border-radius: 10px;
+		box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.9);
+		pointer-events: none;
+	}
+	@media (prefers-reduced-motion: no-preference) {
+		.vis-target::before {
+			animation: vis-pulse 1.8s var(--lg-ease-out) infinite;
+		}
+		.vis-tap {
+			animation: vis-tap 1.8s var(--lg-ease-out) infinite;
+		}
+	}
+	@keyframes vis-pulse {
+		0% {
+			opacity: 1;
+			transform: scale(1);
+		}
+		70%,
+		100% {
+			opacity: 0;
+			transform: scale(1.25);
+		}
+	}
+	.vis-cursor {
+		position: absolute;
+		left: calc(50% + 6px);
+		top: 55%;
+		filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
+	}
+	.vis-tap {
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		width: 22px;
+		height: 22px;
+		margin: -11px 0 0 -11px;
+		border-radius: 50%;
+		background: rgba(255, 255, 255, 0.5);
+		box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
+	}
+	@keyframes vis-tap {
+		0%,
+		20% {
+			opacity: 0;
+			transform: scale(1.6);
+		}
+		45% {
+			opacity: 1;
+			transform: scale(1);
+		}
+		75%,
+		100% {
+			opacity: 0;
+			transform: scale(0.9);
+		}
+	}
+
+	/* Desktop browser window */
+	.im-vis--window {
+		height: 212px;
+	}
+	/* 32px bar: the 10px traffic lights sit 11px from the corner (16 - 11 = 5). */
+	.vw-bar {
+		position: relative;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		height: 32px;
+		padding: 0 18px 0 11px;
+		background: #2a2b30;
+		box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+	}
+	.vw-dots {
+		display: flex;
+		gap: 6px;
+	}
+	.vw-dots i {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: #ff5f57;
+	}
+	.vw-dots i:nth-child(2) {
+		background: #febc2e;
+	}
+	.vw-dots i:nth-child(3) {
+		background: #28c840;
+	}
+	.vw-url {
+		flex: 1;
+		min-width: 0;
+		height: 22px;
+		margin: 0 20px 0 8px;
+		padding: 0 10px;
+		border-radius: 11px;
+		background: rgba(255, 255, 255, 0.08);
+		font-size: 11px;
+		line-height: 22px;
+		text-align: center;
+		color: rgba(235, 235, 245, 0.7);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.vw-ext {
+		position: relative;
+		display: grid;
+		place-items: center;
+		width: 24px;
+		height: 22px;
+		border-radius: 6px;
+		background: rgba(10, 132, 255, 0.3);
+		box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.6);
+		font: 600 10px/1 ui-monospace, "SF Mono", Menlo, monospace;
+		color: #fff;
+	}
+	.vw-url + .vw-ext {
+		margin-left: -12px;
+	}
+	.vw-page {
+		position: relative;
+		height: calc(100% - 32px);
+		padding: 16px;
+		box-sizing: border-box;
+	}
+	.tm {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		grid-template-rows: auto 1fr;
+		gap: 14px 16px;
+	}
+	.tm-head {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-width: 0;
+	}
+	.tm-icon {
+		flex: none;
+		display: grid;
+		place-items: center;
+		width: 32px;
+		height: 32px;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.1);
+		color: rgba(255, 255, 255, 0.8);
+	}
+	.tm-name {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		font-size: 11px;
+		line-height: 15px;
+		color: rgba(235, 235, 245, 0.55);
+	}
+	.tm-name b {
+		font-size: 14px;
+		line-height: 18px;
+		color: #fff;
+	}
+	.tm-name span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.tm-actions {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.tm .vis-code {
+		grid-column: 1 / -1;
+		padding-top: 12px;
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+	}
+
+	/* Userscripts popup (Safari) */
+	.us-pop {
+		position: absolute;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		box-sizing: border-box;
+		padding: 10px;
+		border-radius: 16px;
+		background: #2c2c31;
+		box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 12px 32px rgba(0, 0, 0, 0.55);
+		font-size: 11px;
+		line-height: 15px;
+		color: rgba(235, 235, 245, 0.6);
+	}
+	.us-pop--mac {
+		top: 8px;
+		right: 12px;
+		width: 232px;
+	}
+	.us-pop--mac::before {
+		content: "";
+		position: absolute;
+		top: -6px;
+		right: 16px;
+		width: 12px;
+		height: 12px;
+		background: #2c2c31;
+		transform: rotate(45deg);
+		box-shadow: -1px -1px 0 rgba(255, 255, 255, 0.1);
+	}
+	.us-title {
+		font-weight: 600;
+		color: #fff;
+		text-align: center;
+	}
+	.us-banner {
+		padding: 4px 8px;
+		border-radius: 6px;
+		background: rgba(255, 159, 10, 0.18);
+		color: #ffd27a;
+		text-wrap: balance;
+	}
+	.us-banner b {
+		text-decoration: underline;
+	}
+	.us-name {
+		font-size: 13px;
+		line-height: 17px;
+		color: #fff;
+	}
+	.us-meta {
+		font-family: ui-monospace, "SF Mono", Menlo, monospace;
+		font-size: 10px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	/* Popup r16, padding 10 -> buttons r6 at its bottom corners. */
+	.us-buttons {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 8px;
+		margin-top: 2px;
+	}
+
+	/* iPhone */
+	.im-vis--phone {
+		height: 280px;
+		background: radial-gradient(120% 90% at 50% 0%, #22305e 0%, #1b1c20 70%);
+	}
+	/* Phone body r34 with a 6px bezel -> screen r28. Cropped at the top. */
+	.ph {
+		position: absolute;
+		left: 50%;
+		bottom: 16px;
+		width: 248px;
+		height: 330px;
+		padding: 6px;
+		box-sizing: border-box;
+		border-radius: 34px;
+		background: #0b0b0d;
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 16px 40px rgba(0, 0, 0, 0.5);
+		transform: translateX(-50%);
+	}
+	.ph-screen {
+		position: relative;
+		height: 100%;
+		overflow: hidden;
+		border-radius: 28px;
+		background: #f2f2f7;
+	}
+	.ph-screen .vis-code {
+		padding: 70px 12px 0;
+		font-size: 9.5px;
+		line-height: 13px;
+		color: #3a3a3c;
+	}
+	.us-pop--ios {
+		left: 8px;
+		right: 8px;
+		bottom: 54px;
+	}
+	/* Address bar pill: 8px inset, so r = 28 - 8 = 20. */
+	.ph-bar {
+		position: absolute;
+		left: 8px;
+		right: 8px;
+		bottom: 8px;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		height: 40px;
+		padding: 0 12px 0 4px;
+		box-sizing: border-box;
+		border-radius: 20px;
+		background: rgba(255, 255, 255, 0.92);
+		box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 4px 14px rgba(0, 0, 0, 0.12);
+		color: #1c1c1e;
+	}
+	/* Extensions button: 32px circle at 4px inset in the 40px pill (20 - 4 = 16). */
+	.ph-ext {
+		display: grid;
+		place-items: center;
+		width: 32px;
+		height: 32px;
+		border-radius: 16px;
+		background: rgba(10, 132, 255, 0.16);
+		color: var(--lg-accent-blue);
+	}
+	.ph-url {
+		flex: 1;
+		font-size: 11px;
+		text-align: center;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		padding-right: 24px;
+	}
+
+	/* ---- Phones: a floating bottom sheet ---- */
+	@media (max-width: 699px) {
+		.im {
+			width: calc(100% - 16px);
+			max-height: calc(100dvh - max(8px, var(--lg-safe-top)) - max(8px, var(--lg-safe-bottom)) - 8px);
+			margin: auto 8px max(8px, var(--lg-safe-bottom));
+		}
+		.im-title {
+			font-size: 22px;
+		}
+		.im-vis--window {
+			height: 220px;
+		}
+		.tm-actions {
+			grid-column: 1 / -1;
+		}
+		.us-pop--mac {
+			left: 12px;
+			right: 12px;
+			width: auto;
+		}
+		@media (prefers-reduced-motion: no-preference) {
+			.im[open] .im-sheet {
+				animation: im-up 0.45s var(--lg-ease-spring);
+			}
+		}
+	}
+	@keyframes im-up {
+		from {
+			transform: translateY(48px);
+			opacity: 0.4;
+		}
+	}
+</style>
