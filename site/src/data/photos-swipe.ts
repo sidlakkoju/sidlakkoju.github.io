@@ -211,7 +211,7 @@ export const diagram = {
 			title: "1 · Read your library",
 			caption:
 				"The userscript calls the same web API photos.google.com uses, with the session you're already signed in with. No password, and no Google API permissions to grant.",
-			captionShort: "It calls the same web API as photos.google.com, with your existing session. No password, no permissions to grant.",
+			captionShort: "It calls the same web API as photos.google.com, with your session. No password, no permissions to grant.",
 			active: ["userscript", "api"],
 			routes: [{ id: "toApi", dir: "out" }],
 			labels: ["libraryPage"],
