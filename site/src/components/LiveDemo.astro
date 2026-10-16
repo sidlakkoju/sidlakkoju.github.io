@@ -57,8 +57,9 @@ import { links } from "../data/photos-swipe";
 				</span>
 			</div>
 			<!-- A screenshot of the demo as it opens (scripts/images.mjs preview), so
-			     the inline demo fades in over a matching picture. It's the page's
-			     LCP element on every layout: fetched early, never lazy. -->
+			     the inline demo fades in over the same screen (only the shuffled
+			     photo differs). It's the page's LCP element on every layout:
+			     fetched early, never lazy. -->
 			<ResponsiveImage
 				class="phone-preview"
 				base="/photos-swipe/preview"
@@ -122,7 +123,7 @@ import { links } from "../data/photos-swipe";
 		// The inline demo (~330 KB of script, run in this page's process)
 		// waits for the page to load and go idle, so it never competes with
 		// first paint or the preview image. The preview is a screenshot of
-		// the demo's first screen, so the demo fades in over a match.
+		// the demo's first screen, so the swap is barely visible.
 		let pageReady = false;
 
 		function makeFrame(url: string, title: string) {
