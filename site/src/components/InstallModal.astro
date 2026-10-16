@@ -1144,6 +1144,14 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 			right: 12px;
 			width: auto;
 		}
+		/* No backdrop blur on phones: re-blurring the page under a sheet that
+		   is sliding and fading is what made the open stutter in iOS Safari.
+		   An opaque fill matching the blurred, dimmed result looks the same. */
+		.im-sheet {
+			-webkit-backdrop-filter: none;
+			backdrop-filter: none;
+			background-color: rgb(31, 31, 37);
+		}
 		@media (prefers-reduced-motion: no-preference) {
 			.im[open] .im-sheet {
 				animation: im-up 0.45s var(--lg-ease-spring);

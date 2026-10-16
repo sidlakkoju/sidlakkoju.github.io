@@ -5,7 +5,7 @@ import LiveDemo from "../components/LiveDemo.astro";
 import HowItWorks from "../components/HowItWorks.astro";
 import InstallModal from "../components/InstallModal.astro";
 import { name, siteUrl, socialIcons } from "../data/site";
-import { intro, links, installSteps } from "../data/photos-swipe";
+import { intro, links } from "../data/photos-swipe";
 
 const url = new URL("/photos-swipe/", siteUrl).href;
 const title = "Photos Swipe: swipe to clean up Google Photos";
@@ -101,34 +101,6 @@ const structuredData = {
 
 			<HowItWorks />
 
-			<section class="ps-install" id="install" aria-labelledby="install-title">
-				<div class="ps-install-card lg-glass-regular">
-					<div class="ps-install-head">
-						<h2 id="install-title">Install</h2>
-						<a class="lg-button lg-button--primary lg-button--small ps-install-btn" href={links.install} data-install-open>
-							<Icon name="download" size={17} />
-							Install
-						</a>
-					</div>
-					<ol class="ps-steps" role="list">
-						{
-							installSteps.map((s, i) => (
-								<li>
-									<span class="ps-step-num" aria-hidden="true">{i + 1}</span>
-									<span class="ps-step-text">
-										<span class="lg-headline">{s.title}</span>
-										<span class="ps-step-desc">{s.text}</span>
-									</span>
-								</li>
-							))
-						}
-					</ol>
-					<a class="lg-button lg-button--primary ps-install-btn--wide" href={links.install} data-install-open>
-						<Icon name="download" />
-						Install
-					</a>
-				</div>
-			</section>
 		</main>
 
 		<footer class="ps-footer">
@@ -182,24 +154,54 @@ const structuredData = {
 		overflow: hidden;
 		pointer-events: none;
 	}
+	/* The washes used to be gradients under filter: blur(60px), which Safari
+	   re-blurs whenever it repaints a tile (scrolling, every new tile). These
+	   are the same washes with the blur baked in: the box grows by 3 sigma
+	   (180px) per side and the stops sample the blurred profile. */
 	.wash {
 		position: absolute;
-		border-radius: 50%;
-		filter: blur(60px);
 	}
 	.wash--blue {
-		left: calc(50% + 40px);
-		top: -260px;
-		width: 900px;
-		height: 900px;
-		background: radial-gradient(closest-side, rgba(31, 47, 209, 0.85), rgba(31, 47, 209, 0.35) 55%, rgba(31, 47, 209, 0));
+		left: calc(50% - 140px);
+		top: -440px;
+		width: 1260px;
+		height: 1260px;
+		background: radial-gradient(
+			closest-side,
+			rgba(31, 47, 209, 0.7) 0%,
+			rgba(31, 47, 209, 0.67) 8%,
+			rgba(31, 47, 209, 0.6) 17%,
+			rgba(31, 47, 209, 0.51) 25%,
+			rgba(31, 47, 209, 0.41) 33%,
+			rgba(31, 47, 209, 0.316) 42%,
+			rgba(31, 47, 209, 0.225) 50%,
+			rgba(31, 47, 209, 0.14) 58%,
+			rgba(31, 47, 209, 0.066) 67%,
+			rgba(31, 47, 209, 0.022) 75%,
+			rgba(31, 47, 209, 0.004) 83%,
+			rgba(31, 47, 209, 0) 92%
+		);
 	}
 	.wash--cyan {
-		left: calc(50% - 1040px);
-		top: 1300px;
-		width: 800px;
-		height: 700px;
-		background: radial-gradient(closest-side, rgba(40, 150, 170, 0.42), rgba(40, 150, 170, 0));
+		left: calc(50% - 1220px);
+		top: 1120px;
+		width: 1160px;
+		height: 1060px;
+		background: radial-gradient(
+			closest-side,
+			rgba(40, 150, 170, 0.336) 0%,
+			rgba(40, 150, 170, 0.324) 8%,
+			rgba(40, 150, 170, 0.292) 17%,
+			rgba(40, 150, 170, 0.249) 25%,
+			rgba(40, 150, 170, 0.201) 33%,
+			rgba(40, 150, 170, 0.152) 42%,
+			rgba(40, 150, 170, 0.103) 50%,
+			rgba(40, 150, 170, 0.059) 58%,
+			rgba(40, 150, 170, 0.027) 67%,
+			rgba(40, 150, 170, 0.008) 75%,
+			rgba(40, 150, 170, 0.002) 83%,
+			rgba(40, 150, 170, 0) 92%
+		);
 	}
 	.orb {
 		position: absolute;
@@ -305,81 +307,9 @@ const structuredData = {
 		padding-top: 48px;
 	}
 
-	/* ---- Install steps ---- */
-	.ps-step-text {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 0;
-	}
-	.ps-step-desc {
-		font-size: 15px;
-		line-height: 20px;
-		letter-spacing: -0.2px;
-		color: var(--lg-label-secondary);
-		text-wrap: pretty;
-	}
-
 	/* ---- How it works ---- */
 	.ps-main :global(.hiw) {
 		margin-top: 112px;
-	}
-
-	/* ---- Install ---- */
-	.ps-install {
-		margin-top: 112px;
-	}
-	.ps-install-card {
-		display: flex;
-		align-items: center;
-		gap: 40px;
-		padding: 33px 41px;
-		border-radius: var(--lg-radius-xl);
-	}
-	.ps-install-head {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 14px;
-		flex: none;
-	}
-	.ps-install-head h2 {
-		margin: 0;
-		font-family: var(--lg-font-display);
-		font-size: 28px;
-		line-height: 34px;
-		font-weight: 700;
-		letter-spacing: -0.5px;
-	}
-	.ps-steps {
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 40px;
-		flex: 1;
-		margin: 0;
-		padding: 0;
-		list-style: none;
-	}
-	.ps-steps li {
-		display: flex;
-		align-items: flex-start;
-		gap: 12px;
-	}
-	.ps-step-num {
-		flex: none;
-		display: grid;
-		place-items: center;
-		width: 30px;
-		height: 30px;
-		border-radius: 50%;
-		background: var(--lg-tint-blue);
-		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
-		font-size: 15px;
-		font-weight: 600;
-		font-variant-numeric: tabular-nums;
-	}
-	.ps-install-btn--wide {
-		display: none;
 	}
 
 	/* ---- Footer ---- */
@@ -388,7 +318,7 @@ const structuredData = {
 		flex-direction: column;
 		align-items: center;
 		gap: 14px;
-		padding-top: 80px;
+		padding-top: 96px;
 		padding-bottom: max(56px, calc(var(--lg-safe-bottom) + 24px));
 	}
 	.ps-socials {
@@ -430,20 +360,6 @@ const structuredData = {
 	}
 
 	/* ---- Narrower desktops ---- */
-	@media (max-width: 1100px) {
-		.ps-install-card {
-			flex-direction: column;
-			align-items: stretch;
-		}
-		.ps-install-head {
-			flex-direction: row;
-			align-items: center;
-			justify-content: space-between;
-		}
-		.ps-steps {
-			gap: 24px;
-		}
-	}
 	@media (max-width: 959px) {
 		.ps-hero {
 			grid-template-columns: minmax(0, 1fr);
@@ -510,38 +426,56 @@ const structuredData = {
 		.ps-main :global(.hiw) {
 			margin-top: 48px;
 		}
-		.ps-install {
-			margin-top: 48px;
-		}
-		.ps-install-card {
-			padding: 23px 21px 23px;
-			gap: 16px;
-		}
-		.ps-install-head .ps-install-btn {
-			display: none;
-		}
-		.ps-steps {
-			grid-template-columns: minmax(0, 1fr);
-			gap: 16px;
-		}
-		.ps-install-btn--wide {
-			display: flex;
-			margin-top: 0;
-		}
 		.ps-footer {
-			padding-top: 40px;
+			padding-top: 56px;
+		}
+		/* Backdrop blur over these smooth washes is invisible but costs a
+		   live blur layer per control in iOS Safari; plain glass fill. */
+		.ps-page :global(.lg-glass-clear) {
+			-webkit-backdrop-filter: none;
+			backdrop-filter: none;
 		}
 		.wash--blue {
-			left: 60px;
-			top: -200px;
-			width: 520px;
-			height: 520px;
+			left: -120px;
+			top: -380px;
+			width: 880px;
+			height: 880px;
+			background: radial-gradient(
+				closest-side,
+				rgba(31, 47, 209, 0.59) 0%,
+				rgba(31, 47, 209, 0.566) 8%,
+				rgba(31, 47, 209, 0.503) 17%,
+				rgba(31, 47, 209, 0.409) 25%,
+				rgba(31, 47, 209, 0.311) 33%,
+				rgba(31, 47, 209, 0.214) 42%,
+				rgba(31, 47, 209, 0.126) 50%,
+				rgba(31, 47, 209, 0.064) 58%,
+				rgba(31, 47, 209, 0.027) 67%,
+				rgba(31, 47, 209, 0.008) 75%,
+				rgba(31, 47, 209, 0.002) 83%,
+				rgba(31, 47, 209, 0) 92%
+			);
 		}
 		.wash--cyan {
-			left: -220px;
-			top: 1700px;
-			width: 500px;
-			height: 500px;
+			left: -400px;
+			top: 1520px;
+			width: 860px;
+			height: 860px;
+			background: radial-gradient(
+				closest-side,
+				rgba(40, 150, 170, 0.295) 0%,
+				rgba(40, 150, 170, 0.284) 8%,
+				rgba(40, 150, 170, 0.254) 17%,
+				rgba(40, 150, 170, 0.21) 25%,
+				rgba(40, 150, 170, 0.16) 33%,
+				rgba(40, 150, 170, 0.11) 42%,
+				rgba(40, 150, 170, 0.065) 50%,
+				rgba(40, 150, 170, 0.033) 58%,
+				rgba(40, 150, 170, 0.013) 67%,
+				rgba(40, 150, 170, 0.004) 75%,
+				rgba(40, 150, 170, 0.001) 83%,
+				rgba(40, 150, 170, 0) 92%
+			);
 		}
 		.orb--silver {
 			left: calc(100% - 60px);
@@ -552,9 +486,11 @@ const structuredData = {
 		.orb--blue {
 			display: none;
 		}
+		/* Down by the footer, clear of the How it works diagram. */
 		.orb--cyan {
 			left: -22px;
-			top: 1290px;
+			top: auto;
+			bottom: 72px;
 			width: 60px;
 			height: 60px;
 		}

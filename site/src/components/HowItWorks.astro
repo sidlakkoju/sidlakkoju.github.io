@@ -52,14 +52,31 @@ const labelPos: Record<LabelId, { left?: number; right?: number; top: number }> 
 	appCode: { left: 676, top: 522 },
 };
 
-// ---- Mobile (vertical) mapping ------------------------------------------
-// Routes collapse onto three vertical wires: inside the tab, tab -> Google,
-// and Google -> Worker.
+// Packet tracks as polylines, parsed from the M/H/V route paths above. The
+// client turns them into compositor-only transform keyframes once per step.
+const toPoints = (d: string) => {
+	const pts: [number, number][] = [];
+	let x = 0;
+	let y = 0;
+	for (const [, cmd, n] of d.matchAll(/([MHV])\s*([-\d.]+(?:[\s,]+[-\d.]+)?)/g)) {
+		const v = n.split(/[\s,]+/).map(Number);
+		if (cmd === "M") [x, y] = v;
+		else if (cmd === "H") x = v[0];
+		else y = v[0];
+		pts.push([x, y]);
+	}
+	return pts;
+};
+const routePoints = Object.fromEntries((Object.keys(routes) as RouteId[]).map((id) => [id, toPoints(routes[id].path)]));
+
+// ---- Phone mapping ------------------------------------------------------
+// Three wires: inside the tab (local), tab -> Google (google), and a lane
+// down the right edge that skips the Google group, tab -> Worker (worker).
 const mobileWires: Record<RouteId, string[]> = {
 	toApi: ["google"],
 	toMedia: ["google"],
 	toTrash: ["google"],
-	toWorker: ["google", "worker"],
+	toWorker: ["worker"],
 	toStorage: ["local"],
 };
 const mobileLabelWire: Record<LabelId, string> = {
@@ -74,16 +91,21 @@ const mobileLabelWire: Record<LabelId, string> = {
 const labelsFor = (wire: string) => (Object.keys(labels) as LabelId[]).filter((l) => mobileLabelWire[l] === wire);
 
 // Everything the client script needs, derived from the data above.
-const clientSteps = steps.map((s) => ({
-	id: s.id,
-	title: s.title,
-	caption: s.caption,
-	active: s.active,
-	labels: s.labels,
-	routes: s.routes.map((r) => ({ id: r.id, dir: r.dir })),
-	segments: [...new Set(s.routes.flatMap((r) => routes[r.id].segments))],
-	mobileWires: s.routes.flatMap((r) => mobileWires[r.id].map((w) => ({ id: w, dir: r.dir }))),
-}));
+const clientSteps = steps.map((s) => {
+	const wires = new Map<string, "out" | "in">();
+	for (const r of s.routes) for (const w of mobileWires[r.id]) if (!wires.has(w)) wires.set(w, r.dir);
+	return {
+		id: s.id,
+		title: s.title,
+		caption: s.caption,
+		captionShort: s.captionShort,
+		active: s.active,
+		labels: s.labels,
+		routes: s.routes.map((r) => ({ id: r.id, dir: r.dir })),
+		segments: [...new Set(s.routes.flatMap((r) => routes[r.id].segments))],
+		mobileWires: [...wires].map(([id, dir]) => ({ id, dir })),
+	};
+});
 
 const glyphIcon = (glyph: string) => glyph as "hard-drive" | "braces" | "download" | "trash" | "sync";
 const isActive = (id: NodeId) => first.active.includes(id);
@@ -93,17 +115,17 @@ const isActive = (id: NodeId) => first.active.includes(id);
 	<h2 id="hiw-title" class="hiw-title">{diagram.heading}</h2>
 	<p class="hiw-sub">{diagram.subheading}</p>
 
-	<div class="hiw-diagram" data-hiw data-step={first.id} data-steps={JSON.stringify(clientSteps)}>
+	<div
+		class="hiw-diagram"
+		data-hiw
+		data-step={first.id}
+		data-steps={JSON.stringify(clientSteps)}
+		data-routes={JSON.stringify(routePoints)}
+	>
 		<!-- Desktop: one 1200x600 stage, scaled to fit. -->
 		<div class="hiw-frame">
 			<div class="hiw-stage">
 				<svg class="hiw-wires" viewBox="0 0 1200 600" aria-hidden="true">
-					<defs>
-						<filter id="hiw-glow" x="-50%" y="-50%" width="200%" height="200%">
-							<feGaussianBlur stdDeviation="4" result="b" />
-							<feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-						</filter>
-					</defs>
 					<rect class="hiw-group" x="740.5" y="52.5" width="439" height="351" rx="24" />
 					<!-- Neutral wiring -->
 					<path class="hiw-wire" d="M440 205H660M660 114V500M660 114H760M660 230H760M660 346H760M260 260V410" />
@@ -119,10 +141,9 @@ const isActive = (id: NodeId) => first.active.includes(id);
 							/>
 						))
 					}
-					<!-- Packet tracks (invisible) and the packets themselves -->
-					{(Object.keys(routes) as RouteId[]).map((id) => <path class="hiw-track" data-track={id} d={routes[id].path} />)}
-					<g class="hiw-packets" filter="url(#hiw-glow)"></g>
 				</svg>
+				<!-- Packets: HTML dots moved by transform keyframes (compositor only). -->
+				<div class="hiw-packets" aria-hidden="true"></div>
 
 				<div class="hiw-tab">
 					<span class="hiw-dots" aria-hidden="true"><i></i><i></i><i></i></span>
@@ -175,23 +196,26 @@ const isActive = (id: NodeId) => first.active.includes(id);
 			</div>
 		</div>
 
-		<!-- Mobile: the same diagram, stacked, with the bus as a vertical spine. -->
-		<div class="hiw-stack">
-			<div class="hiw-s-tab">
-				<div class="hiw-s-tabhead">
+		<!--
+			Phones: one-line rows (the active ones add their subtitle, so the
+			height never changes), wires down the icon column with their labels
+			beside them, and the Worker on its own lane down the right edge.
+		-->
+		<div class="hiw-m">
+			<div class="hiw-m-tab">
+				<div class="hiw-m-tabhead">
 					<span class="hiw-dots" aria-hidden="true"><i></i><i></i><i></i></span>
 					<span class="hiw-tab-label">{diagram.tabLabelShort}</span>
 				</div>
 				{
 					(["userscript", "local", "storage"] as const).map((item) =>
 						item === "local" ? (
-							<div class="hiw-s-wire hiw-s-wire--short" data-wire="local">
-								<span class="hiw-s-line" aria-hidden="true">
-									<i class="pk" />
+							<div class="hiw-m-wire hiw-m-wire--local" data-wire="local">
+								<span class="hiw-m-line" aria-hidden="true">
 									<i class="pk" />
 									<i class="pk" />
 								</span>
-								<span class="hiw-s-labels">
+								<span class="hiw-m-labels">
 									{labelsFor("local").map((l) => (
 										<span class:list={["hiw-label", first.labels.includes(l) && "is-shown"]} data-label={l}>
 											{labels[l]}
@@ -200,17 +224,17 @@ const isActive = (id: NodeId) => first.active.includes(id);
 								</span>
 							</div>
 						) : (
-							<div class:list={["hiw-node", "hiw-s-node", isActive(item) && "is-active"]} data-node={item}>
+							<div class:list={["hiw-m-node", isActive(item) && "is-active"]} data-node={item}>
 								{nodes[item].glyph === "app" ? (
-									<img class="hiw-appicon" src="/photos-swipe/icon.png" alt="" width="36" height="36" />
+									<img class="hiw-m-icon" src="/photos-swipe/icon.png" alt="" width="32" height="32" />
 								) : (
-									<span class="hiw-glyph">
-										<Icon name={glyphIcon(nodes[item].glyph)} size={18} />
+									<span class="hiw-m-icon">
+										<Icon name={glyphIcon(nodes[item].glyph)} size={17} />
 									</span>
 								)}
-								<span class="hiw-node-text">
-									<span class="hiw-node-title">{nodes[item].title}</span>
-									<span class="hiw-node-sub">{nodes[item].sub}</span>
+								<span class="hiw-m-text">
+									<span class="hiw-m-title">{nodes[item].title}</span>
+									<span class="hiw-m-sub">{nodes[item].subShort}</span>
 								</span>
 							</div>
 						),
@@ -218,52 +242,61 @@ const isActive = (id: NodeId) => first.active.includes(id);
 				}
 			</div>
 
-			{
-				(["google", "worker"] as const).map((wire) => (
-					<Fragment>
-						<div class:list={["hiw-s-wire", wire === "worker" && "hiw-s-wire--dashed"]} data-wire={wire}>
-							<span class="hiw-s-line" aria-hidden="true">
-								<i class="pk" />
-								<i class="pk" />
-								<i class="pk" />
+			<div class="hiw-m-wire hiw-m-wire--google" data-wire="google">
+				<span class="hiw-m-line" aria-hidden="true">
+					<i class="pk" />
+					<i class="pk" />
+				</span>
+				<span class="hiw-m-labels">
+					{labelsFor("google").map((l) => (
+						<span class:list={["hiw-label", first.labels.includes(l) && "is-shown"]} data-label={l}>
+							{labels[l]}
+						</span>
+					))}
+				</span>
+			</div>
+
+			<div class="hiw-m-group">
+				<span class="lg-eyebrow">{diagram.groupLabel}</span>
+				{
+					(["api", "media", "trash"] as const).map((id) => (
+						<div class:list={["hiw-m-node", isActive(id) && "is-active"]} data-node={id}>
+							<span class="hiw-m-icon">
+								<Icon name={glyphIcon(nodes[id].glyph)} size={17} />
 							</span>
-							<span class="hiw-s-labels">
-								{labelsFor(wire).map((l) => (
-									<span class:list={["hiw-label", first.labels.includes(l) && "is-shown"]} data-label={l}>
-										{labels[l]}
-									</span>
-								))}
+							<span class="hiw-m-text">
+								<span class="hiw-m-title">{nodes[id].title}</span>
+								<span class="hiw-m-sub">{nodes[id].subShort}</span>
 							</span>
 						</div>
-						{wire === "google" ? (
-							<div class="hiw-s-group">
-								<span class="lg-eyebrow">{diagram.groupLabel}</span>
-								{(["api", "media", "trash"] as const).map((id) => (
-									<div class:list={["hiw-node", "hiw-s-node", isActive(id) && "is-active"]} data-node={id}>
-										<span class="hiw-glyph">
-											<Icon name={glyphIcon(nodes[id].glyph)} size={18} />
-										</span>
-										<span class="hiw-node-text">
-											<span class="hiw-node-title">{nodes[id].title}</span>
-											<span class="hiw-node-sub">{nodes[id].sub}</span>
-										</span>
-									</div>
-								))}
-							</div>
-						) : (
-							<div class:list={["hiw-node", "hiw-s-node", "hiw-node--worker", isActive("worker") && "is-active"]} data-node="worker">
-								<span class="hiw-glyph">
-									<Icon name="sync" size={18} />
-								</span>
-								<span class="hiw-node-text">
-									<span class="hiw-node-title">{nodes.worker.title}</span>
-									<span class="hiw-node-sub">{nodes.worker.sub}</span>
-								</span>
-							</div>
-						)}
-					</Fragment>
-				))
-			}
+					))
+				}
+			</div>
+
+			<div class="hiw-m-labels hiw-m-labels--worker">
+				{labelsFor("worker").map((l) => (
+					<span class:list={["hiw-label", first.labels.includes(l) && "is-shown"]} data-label={l}>
+						{labels[l]}
+					</span>
+				))}
+			</div>
+
+			<div class="hiw-m-wire hiw-m-wire--lane" data-wire="worker">
+				<span class="hiw-m-line" aria-hidden="true">
+					<i class="pk" />
+					<i class="pk" />
+				</span>
+			</div>
+
+			<div class:list={["hiw-m-node", "hiw-m-node--worker", isActive("worker") && "is-active"]} data-node="worker">
+				<span class="hiw-m-icon">
+					<Icon name="sync" size={17} />
+				</span>
+				<span class="hiw-m-text">
+					<span class="hiw-m-title">{nodes.worker.title}</span>
+					<span class="hiw-m-sub">{nodes.worker.subShort}</span>
+				</span>
+			</div>
 		</div>
 	</div>
 
@@ -280,13 +313,22 @@ const isActive = (id: NodeId) => first.active.includes(id);
 				>
 					<span class="hiw-chip-progress" aria-hidden="true" />
 					<span class="hiw-chip-label">{s.chip}</span>
+					<span class="hiw-chip-short">
+						{s.chipShort || (
+							<Fragment>
+								<Icon name="workflow" size={18} />
+								<span class="lg-visually-hidden">{s.chip}</span>
+							</Fragment>
+						)}
+					</span>
 				</button>
 			))
 		}
 	</div>
 	<p class="hiw-caption" id="hiw-caption" aria-live="polite">
 		<span class="lg-visually-hidden" data-caption-title>{first.title}: </span>
-		<span data-caption-text>{first.caption}</span>
+		<span class="hiw-caption-long" data-caption-text>{first.caption}</span>
+		<span class="hiw-caption-short" data-caption-short>{first.captionShort}</span>
 	</p>
 	<p class="hiw-footnote">{diagram.footnote}</p>
 </section>
@@ -296,12 +338,14 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		id: string;
 		title: string;
 		caption: string;
+		captionShort: string;
 		active: string[];
 		labels: string[];
 		routes: { id: string; dir: "out" | "in" }[];
 		segments: string[];
 		mobileWires: { id: string; dir: "out" | "in" }[];
 	};
+	type Point = [number, number];
 
 	const STEP_MS = 3600;
 	const STEP_MAX_MS = 7000;
@@ -313,19 +357,70 @@ const isActive = (id: NodeId) => first.active.includes(id);
 	const PACKET_CYCLE = 1600;
 	const PACKETS_PER_ROUTE = 3;
 
+	// easeInOutCubic, as before; baked into the keyframes below.
+	const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+	const unease = (u: number) => {
+		let lo = 0;
+		let hi = 1;
+		for (let i = 0; i < 24; i++) {
+			const mid = (lo + hi) / 2;
+			if (ease(mid) < u) lo = mid;
+			else hi = mid;
+		}
+		return (lo + hi) / 2;
+	};
+
+	// One packet cycle as transform keyframes: move along the polyline for
+	// PACKET_MS (eased, with exact keyframes at every corner), then hide.
+	function packetKeyframes(pts: Point[], dir: "out" | "in"): Keyframe[] {
+		const lens = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
+		const total = lens.reduce((a, b) => a + b, 0);
+		const at = (d: number): Point => {
+			for (let i = 0; i < lens.length; i++) {
+				if (d <= lens[i] || i === lens.length - 1) {
+					const f = lens[i] ? Math.min(1, d / lens[i]) : 0;
+					return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * f, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * f];
+				}
+				d -= lens[i];
+			}
+			return pts[pts.length - 1];
+		};
+		const times = new Set<number>();
+		for (let i = 0; i <= 24; i++) times.add(i / 24);
+		let run = 0;
+		for (const l of lens.slice(0, -1)) {
+			run += l;
+			const u = run / total;
+			times.add(unease(dir === "out" ? u : 1 - u));
+		}
+		const m = PACKET_MS / PACKET_CYCLE;
+		const frames: Keyframe[] = [...times]
+			.sort((a, b) => a - b)
+			.map((t) => {
+				const f = ease(t);
+				const [x, y] = at(total * (dir === "out" ? f : 1 - f));
+				return { offset: t * m, transform: `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`, opacity: 1 };
+			});
+		const end = frames[frames.length - 1].transform;
+		frames.push({ offset: m + 0.001, transform: end, opacity: 0 }, { offset: 1, transform: end, opacity: 0 });
+		return frames;
+	}
+
 	for (const root of document.querySelectorAll<HTMLElement>("[data-hiw]")) {
 		const section = root.closest("section")!;
 		const steps: Step[] = JSON.parse(root.dataset.steps!);
+		const routePoints: Record<string, Point[]> = JSON.parse(root.dataset.routes!);
 		const chips = [...section.querySelectorAll<HTMLButtonElement>(".hiw-chip")];
 		const captionTitle = section.querySelector<HTMLElement>("[data-caption-title]")!;
 		const captionText = section.querySelector<HTMLElement>("[data-caption-text]")!;
+		const captionShort = section.querySelector<HTMLElement>("[data-caption-short]")!;
 		const frame = root.querySelector<HTMLElement>(".hiw-frame")!;
-		const packetLayer = root.querySelector<SVGGElement>(".hiw-packets")!;
+		const packetLayer = root.querySelector<HTMLElement>(".hiw-packets")!;
 		const appCode = root.querySelector<SVGPathElement>(".hiw-appcode")!;
-		const tracks = new Map<string, { el: SVGPathElement; len: number }>();
-		for (const el of root.querySelectorAll<SVGPathElement>(".hiw-track")) {
-			tracks.set(el.dataset.track!, { el, len: el.getTotalLength() });
-		}
+		const nodeEls = [...root.querySelectorAll<HTMLElement>("[data-node]")];
+		const segEls = [...root.querySelectorAll<SVGPathElement>("[data-seg]")];
+		const labelEls = [...root.querySelectorAll<HTMLElement>("[data-label]")];
+		const wireEls = [...root.querySelectorAll<HTMLElement>("[data-wire]")];
 
 		const reduceMQ = window.matchMedia("(prefers-reduced-motion: reduce)");
 		const desktopMQ = window.matchMedia("(min-width: 760px)");
@@ -333,16 +428,16 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		let autoplay = !reduceMQ.matches;
 		let inView = false;
 		let timer = 0;
-		let raf = 0;
 		let remaining = OVERVIEW_MS;
 		let scheduledAt = 0;
 		let progress: Animation | null = null;
+		// Pace by the caption that's actually on screen.
 		const dwell = (i: number) => {
 			if (i === 0) return OVERVIEW_MS;
-			const words = `${steps[i].title} ${steps[i].caption}`.trim().split(/\s+/).length;
+			const caption = desktopMQ.matches ? steps[i].caption : steps[i].captionShort;
+			const words = `${steps[i].title} ${caption}`.trim().split(/\s+/).length;
 			return Math.min(STEP_MAX_MS, Math.max(STEP_MS, READ_BASE_MS + words * READ_WORD_MS));
 		};
-		let stepStart = performance.now();
 
 		// ---- Scale the 1200x600 stage to the frame width ----
 		const fit = () => {
@@ -357,17 +452,11 @@ const isActive = (id: NodeId) => first.active.includes(id);
 			index = (i + steps.length) % steps.length;
 			const s = steps[index];
 			root.dataset.step = s.id;
-			for (const el of root.querySelectorAll<HTMLElement>("[data-node]")) {
-				el.classList.toggle("is-active", s.active.includes(el.dataset.node!));
-			}
-			for (const el of root.querySelectorAll<SVGPathElement>("[data-seg]")) {
-				el.classList.toggle("is-active", s.segments.includes(el.dataset.seg!));
-			}
-			for (const el of root.querySelectorAll<HTMLElement>("[data-label]")) {
-				el.classList.toggle("is-shown", s.labels.includes(el.dataset.label!));
-			}
+			for (const el of nodeEls) el.classList.toggle("is-active", s.active.includes(el.dataset.node!));
+			for (const el of segEls) el.classList.toggle("is-active", s.segments.includes(el.dataset.seg!));
+			for (const el of labelEls) el.classList.toggle("is-shown", s.labels.includes(el.dataset.label!));
 			appCode.classList.toggle("is-shown", s.labels.includes("appCode"));
-			for (const el of root.querySelectorAll<HTMLElement>("[data-wire]")) {
+			for (const el of wireEls) {
 				const w = s.mobileWires.find((m) => m.id === el.dataset.wire);
 				el.classList.toggle("is-active", !!w);
 				el.classList.toggle("dir-in", w?.dir === "in");
@@ -378,7 +467,7 @@ const isActive = (id: NodeId) => first.active.includes(id);
 			});
 			captionTitle.textContent = `${s.title}: `;
 			captionText.textContent = s.caption;
-			stepStart = performance.now();
+			captionShort.textContent = s.captionShort;
 			buildPackets();
 		}
 
@@ -433,51 +522,29 @@ const isActive = (id: NodeId) => first.active.includes(id);
 			chips[index].focus();
 		});
 
-		// ---- Packets (desktop SVG; the stacked layout uses CSS) ----
-		type Packet = { el: SVGCircleElement; track: { el: SVGPathElement; len: number }; dir: "out" | "in"; delay: number };
-		let packets: Packet[] = [];
-		const NS = "http://www.w3.org/2000/svg";
-		const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
-
+		// ---- Desktop packets ----
+		// Built once per step as Web Animations on transform/opacity, so they
+		// run on the compositor: no per-frame script, layout or SVG repaint.
+		// Phones use CSS packets on the stacked wires instead.
+		let packets: Animation[] = [];
 		function buildPackets() {
-			packetLayer.replaceChildren();
+			for (const a of packets) a.cancel();
 			packets = [];
-			if (reduceMQ.matches) return;
+			packetLayer.replaceChildren();
+			if (reduceMQ.matches || !desktopMQ.matches) return;
 			for (const r of steps[index].routes) {
-				const track = tracks.get(r.id);
-				if (!track) continue;
+				const pts = routePoints[r.id];
+				if (!pts) continue;
+				const frames = packetKeyframes(pts, r.dir);
 				for (let k = 0; k < PACKETS_PER_ROUTE; k++) {
-					const el = document.createElementNS(NS, "circle");
-					el.setAttribute("r", "5");
-					el.setAttribute("class", "hiw-packet");
-					el.style.opacity = "0";
+					const el = document.createElement("i");
+					el.className = "hiw-packet";
 					packetLayer.append(el);
-					packets.push({ el, track, dir: r.dir, delay: k * PACKET_GAP });
+					const a = el.animate(frames, { duration: PACKET_CYCLE, delay: k * PACKET_GAP, iterations: Infinity });
+					if (!inView) a.pause();
+					packets.push(a);
 				}
 			}
-			loop();
-		}
-
-		function tick(now: number) {
-			raf = 0;
-			const t = now - stepStart;
-			for (const p of packets) {
-				const local = (t - p.delay) % PACKET_CYCLE;
-				if (t < p.delay || local > PACKET_MS) {
-					p.el.style.opacity = "0";
-					continue;
-				}
-				const f = ease(local / PACKET_MS);
-				const at = p.track.len * (p.dir === "out" ? f : 1 - f);
-				const pt = p.track.el.getPointAtLength(at);
-				p.el.setAttribute("cx", pt.x.toFixed(1));
-				p.el.setAttribute("cy", pt.y.toFixed(1));
-				p.el.style.opacity = "1";
-			}
-			loop();
-		}
-		function loop() {
-			if (!raf && packets.length && inView && desktopMQ.matches && !reduceMQ.matches) raf = requestAnimationFrame(tick);
 		}
 
 		// ---- Visibility ----
@@ -485,17 +552,14 @@ const isActive = (id: NodeId) => first.active.includes(id);
 			(entries) => {
 				inView = entries[0].isIntersecting;
 				root.classList.toggle("in-view", inView);
-				if (inView) {
-					startAutoplay();
-					loop();
-				} else {
-					pauseAutoplay();
-				}
+				for (const a of packets) inView ? a.play() : a.pause();
+				if (inView) startAutoplay();
+				else pauseAutoplay();
 			},
 			{ threshold: 0, rootMargin: "0px 0px -20% 0px" },
 		).observe(root);
 
-		desktopMQ.addEventListener("change", loop);
+		desktopMQ.addEventListener("change", buildPackets);
 		reduceMQ.addEventListener("change", () => {
 			if (reduceMQ.matches) {
 				autoplay = false;
@@ -601,13 +665,24 @@ const isActive = (id: NodeId) => first.active.includes(id);
 	.hiw-seg.is-active {
 		opacity: 1;
 	}
-	.hiw-track {
-		stroke: none;
+	/* Same look as the old SVG packet (r5, 1.5 stroke, blur(4) glow). */
+	.hiw-packets {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
 	}
-	.hiw-wires :global(.hiw-packet) {
-		fill: #cfe6ff;
-		stroke: var(--lg-accent-blue);
-		stroke-width: 1.5;
+	.hiw-packets :global(.hiw-packet) {
+		position: absolute;
+		left: -5.75px;
+		top: -5.75px;
+		box-sizing: border-box;
+		width: 11.5px;
+		height: 11.5px;
+		border: 1.5px solid var(--lg-accent-blue);
+		border-radius: 50%;
+		background: #cfe6ff;
+		box-shadow: 0 0 8px 1px rgba(80, 160, 255, 0.75);
+		opacity: 0;
 	}
 
 	.hiw-tab {
@@ -754,130 +829,272 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		transition-delay: 0.15s;
 	}
 
-	/* ---- Stacked (mobile) ---- */
-	.hiw-stack {
+	/* ---- Phones ---- */
+	/* Rows sit in containers with r28 and a 12px inset, so rows are r16 and
+	   their 32px icons, inset 10, are r6. Wires run down the icon column. */
+	.hiw-m {
+		--lane: 32px;
+		--row-h: 52px;
+		--row-r: calc(var(--lg-radius-lg) - 12px);
+		--icon-r: calc(var(--row-r) - (var(--row-h) - 32px) / 2);
 		display: none;
-		flex-direction: column;
-		align-items: stretch;
+		grid-template-columns: minmax(0, 1fr) var(--lane);
+		grid-template-areas:
+			"tab tab"
+			"gw lane"
+			"group lane"
+			"wl lane"
+			"worker worker";
 	}
-	.hiw-s-tab,
-	.hiw-s-group {
+	.hiw-m-tab {
+		grid-area: tab;
 		display: flex;
 		flex-direction: column;
+		padding: 12px;
 		border-radius: var(--lg-radius-lg);
-	}
-	.hiw-s-tab {
-		padding: 13px 15px 15px;
 		background: var(--lg-glass-fill);
 		box-shadow: var(--lg-hairline), var(--lg-shadow-regular);
 	}
-	.hiw-s-tabhead {
+	.hiw-m-tabhead {
 		display: flex;
 		align-items: center;
 		gap: 10px;
 		height: 28px;
-		margin-bottom: 0;
+		margin-bottom: 8px;
+		padding-left: 6px;
 	}
-	.hiw-s-tabhead .hiw-dots {
-		gap: 6px;
-	}
-	.hiw-s-tabhead .hiw-dots i {
+	.hiw-m-tabhead .hiw-dots i {
 		width: 8px;
 		height: 8px;
 	}
-	.hiw-s-group {
+	.hiw-m-group {
+		grid-area: group;
+		display: flex;
+		flex-direction: column;
 		gap: 8px;
-		padding: 13px;
+		padding: 11px;
 		border: 1px dashed var(--lg-glass-stroke);
+		border-radius: var(--lg-radius-lg);
 	}
-	.hiw-s-group > .lg-eyebrow {
-		margin-bottom: 0;
+	.hiw-m-group > .lg-eyebrow {
+		padding: 1px 0 0 6px;
 	}
-	.hiw-s-node {
-		position: relative;
-		min-height: 60px;
-		padding: 11px 13px;
-		gap: 12px;
-	}
-	.hiw-s-node .hiw-appicon {
-		width: 36px;
-		height: 36px;
-		border-radius: 9px;
-	}
-	.hiw-s-node .hiw-glyph {
-		width: 36px;
-		height: 36px;
-		border-radius: 10px;
-	}
-	.hiw-s-node .hiw-node-title {
-		font-size: 15px;
-		line-height: 20px;
-		letter-spacing: -0.2px;
-	}
-	.hiw-s-wire {
+
+	.hiw-m-node {
 		position: relative;
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		min-height: 30px;
+		gap: 10px;
+		box-sizing: border-box;
+		height: var(--row-h);
+		padding: 0 12px 0 10px;
+		border-radius: var(--row-r);
+		background: var(--lg-glass-fill);
+		box-shadow: var(--lg-hairline);
+		transition:
+			opacity 0.3s ease,
+			background-color 0.3s ease,
+			box-shadow 0.3s ease;
 	}
-	.hiw-s-wire--short {
-		min-height: 22px;
+	.hiw-m-node[data-node="userscript"] {
+		background: var(--lg-glass-fill-strong);
 	}
-	.hiw-s-line {
+	.hiw-m-node--worker {
+		grid-area: worker;
+		box-shadow: none;
+		outline: 1.5px dashed var(--lg-glass-stroke);
+		outline-offset: -1.5px;
+	}
+	.hiw-m-node.is-active {
+		background-color: rgba(10, 132, 255, 0.16);
+		box-shadow: inset 0 0 0 1.5px var(--lg-accent-blue);
+	}
+	.hiw-m-node--worker.is-active {
+		box-shadow: none;
+		outline-color: var(--lg-accent-blue);
+	}
+	.hiw-diagram:not([data-step="overview"]) .hiw-m-node:not(.is-active) {
+		opacity: 0.45;
+	}
+	.hiw-m-icon {
+		flex: none;
+		display: grid;
+		place-items: center;
+		width: 32px;
+		height: 32px;
+		border-radius: var(--icon-r);
+		background: var(--lg-glass-fill-strong);
+		color: var(--lg-label);
+	}
+	.hiw-m-text {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-width: 0;
+	}
+	.hiw-m-title,
+	.hiw-m-sub {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.hiw-m-title {
+		font-size: 15px;
+		line-height: 20px;
+		font-weight: 600;
+		letter-spacing: -0.2px;
+	}
+	/* Only active rows show their subtitle; rows keep one height either way. */
+	.hiw-m-sub {
+		display: none;
+		font-size: 13px;
+		line-height: 16px;
+		color: var(--lg-label-secondary);
+	}
+	.hiw-m-node.is-active .hiw-m-sub {
+		display: block;
+	}
+
+	/* Wires: a line at --wire-x with its labels to the right, never on it. */
+	.hiw-m-wire {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+	.hiw-m-wire--local {
+		--wire-x: 26px; /* icon centre, inside the tab's 12px padding */
+		height: 36px;
+	}
+	.hiw-m-wire--google {
+		--wire-x: 38px;
+		grid-area: gw;
+		height: 48px;
+	}
+	/* The Worker gets its own lane down the right edge, clear of the Google group. */
+	.hiw-m-wire--lane {
+		--wire-x: calc(var(--lane) / 2);
+		grid-area: lane;
+	}
+	.hiw-m-line {
 		position: absolute;
 		top: 0;
 		bottom: 0;
-		left: 50%;
+		left: calc(var(--wire-x) - 1px);
 		width: 2px;
-		margin-left: -1px;
 		background: var(--lg-glass-stroke);
-		transition: background-color 0.3s ease, box-shadow 0.3s ease;
 	}
-	.hiw-s-wire--dashed .hiw-s-line {
+	/* Tuck under the tab's rounded corner. */
+	.hiw-m-wire--lane .hiw-m-line {
+		top: -3px;
 		background: repeating-linear-gradient(to bottom, var(--lg-glass-stroke) 0 4px, transparent 4px 8px);
 	}
-	.hiw-s-wire.is-active .hiw-s-line {
+	.hiw-m-wire.is-active .hiw-m-line {
+		left: calc(var(--wire-x) - 1.5px);
 		width: 3px;
-		margin-left: -1.5px;
 		background: var(--lg-accent-blue);
-		box-shadow: 0 0 10px rgba(10, 133, 255, 0.8);
+		box-shadow: 0 0 8px rgba(10, 133, 255, 0.7);
 	}
-	.hiw-s-wire--dashed.is-active .hiw-s-line {
+	.hiw-m-wire--lane.is-active .hiw-m-line {
 		background: repeating-linear-gradient(to bottom, var(--lg-accent-blue) 0 5px, transparent 5px 9px);
+		box-shadow: none;
 	}
-	/* Label pills sit centered on the wire, over the line. */
-	.hiw-s-labels {
-		position: relative;
+	.hiw-m-labels {
 		display: flex;
-		flex-wrap: wrap;
-		justify-content: center;
-		gap: 6px;
-		padding: 6px 0;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+		padding-left: calc(var(--wire-x) + 14px);
 	}
-	.hiw-s-labels:not(:has(.is-shown)) {
-		padding: 0;
+	.hiw-m-labels--worker {
+		grid-area: wl;
+		justify-content: flex-end;
+		height: 44px;
+		padding-left: 0;
 	}
-	.hiw-s-labels .hiw-label {
+	.hiw-m-labels .hiw-label {
 		position: static;
 		display: none;
 	}
-	.hiw-s-labels .hiw-label.is-shown {
+	.hiw-m-labels .hiw-label.is-shown {
 		display: block;
+		animation: hiw-label-in 0.25s ease 0.15s both;
 	}
-	.pk {
+	@keyframes hiw-label-in {
+		from {
+			opacity: 0;
+			transform: translateY(3px);
+		}
+	}
+
+	/* Packets: two per active wire, one direction, transform-only. The
+	   element spans the wire, so translateY(100%) is exactly the wire length. */
+	.hiw-m .pk {
 		position: absolute;
 		left: 50%;
 		top: 0;
-		width: 10px;
-		height: 10px;
-		margin: -5px 0 0 -5px;
+		width: 12px;
+		height: 100%;
+		margin-left: -6px;
+		opacity: 0;
+		pointer-events: none;
+	}
+	.hiw-m .pk::before {
+		content: "";
+		position: absolute;
+		left: 0;
+		top: -6px;
+		width: 12px;
+		height: 12px;
 		border-radius: 50%;
 		background: #cfe6ff;
 		box-shadow:
-			0 0 0 1.5px var(--lg-accent-blue),
-			0 0 10px 2px rgba(10, 133, 255, 0.85);
-		opacity: 0;
+			0 0 0 2px var(--lg-accent-blue),
+			0 0 10px 2px rgba(10, 133, 255, 0.8);
+	}
+	@media (prefers-reduced-motion: no-preference) {
+		.in-view .hiw-m-wire.is-active .pk {
+			animation: hiw-pk 1.8s infinite;
+		}
+		.in-view .hiw-m-wire.is-active .pk:nth-child(2) {
+			animation-delay: 0.9s;
+		}
+		/* A separate name (not animation-direction) so flipping direction
+		   between steps restarts the packets instead of jumping them. */
+		.in-view .hiw-m-wire.is-active.dir-in .pk {
+			animation-name: hiw-pk-in;
+		}
+	}
+	@keyframes hiw-pk {
+		0% {
+			transform: translateY(0);
+			opacity: 0;
+			animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+		}
+		6%,
+		54% {
+			opacity: 1;
+		}
+		60%,
+		100% {
+			transform: translateY(100%);
+			opacity: 0;
+		}
+	}
+	@keyframes hiw-pk-in {
+		0% {
+			transform: translateY(100%);
+			opacity: 0;
+			animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+		}
+		6%,
+		54% {
+			opacity: 1;
+		}
+		60%,
+		100% {
+			transform: translateY(0);
+			opacity: 0;
+		}
 	}
 
 	@media (max-width: 759px) {
@@ -893,68 +1110,11 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		.hiw-frame {
 			display: none;
 		}
-		.hiw-stack {
-			display: flex;
+		.hiw-m {
+			display: grid;
 		}
 		.hiw-diagram {
-			margin-top: 12px;
-		}
-	}
-
-	@media (prefers-reduced-motion: no-preference) {
-		.in-view .hiw-s-wire.is-active .pk {
-			animation: hiw-packet 1.6s infinite;
-		}
-		.in-view .hiw-s-wire.is-active .pk:nth-child(2) {
-			animation-delay: 0.25s;
-		}
-		.in-view .hiw-s-wire.is-active .pk:nth-child(3) {
-			animation-delay: 0.5s;
-		}
-		.in-view .hiw-s-wire.is-active.dir-in .pk {
-			animation-name: hiw-packet-in;
-		}
-	}
-	@keyframes hiw-packet {
-		0% {
-			top: 0;
-			opacity: 0;
-			animation-timing-function: ease-in-out;
-		}
-		4% {
-			opacity: 1;
-		}
-		52% {
-			opacity: 1;
-		}
-		56% {
-			top: 100%;
-			opacity: 0;
-		}
-		100% {
-			top: 100%;
-			opacity: 0;
-		}
-	}
-	@keyframes hiw-packet-in {
-		0% {
-			top: 100%;
-			opacity: 0;
-			animation-timing-function: ease-in-out;
-		}
-		4% {
-			opacity: 1;
-		}
-		52% {
-			opacity: 1;
-		}
-		56% {
-			top: 0;
-			opacity: 0;
-		}
-		100% {
-			top: 0;
-			opacity: 0;
+			margin-top: 16px;
 		}
 	}
 
@@ -1004,11 +1164,49 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		color: var(--lg-label-tertiary);
 		text-wrap: pretty;
 	}
+	.hiw-chip-short,
+	.hiw-caption-short {
+		display: none;
+	}
+	/* Phones: one row, a segmented control. Track r22 with a 4px inset, so
+	   segments are 36px tall and r18; 8px between segments. */
 	@media (max-width: 759px) {
 		.hiw-chips {
-			justify-content: flex-start;
-			gap: 6px;
-			margin-top: 12px;
+			flex-wrap: nowrap;
+			gap: 8px;
+			margin-top: 16px;
+			padding: 4px;
+			border-radius: 22px;
+			background: var(--lg-glass-fill);
+			box-shadow: var(--lg-hairline);
+			/* Fallback for very narrow screens; 5 segments fit from 360px. */
+			overflow-x: auto;
+			scroll-snap-type: x mandatory;
+			scrollbar-width: none;
+		}
+		.hiw-chips::-webkit-scrollbar {
+			display: none;
+		}
+		.hiw-chip {
+			flex: 1 0 auto;
+			justify-content: center;
+			height: 36px;
+			padding: 0 10px;
+			border-radius: 18px;
+			background: transparent;
+			box-shadow: none;
+			scroll-snap-align: start;
+		}
+		.hiw-chip-label,
+		.hiw-caption-long {
+			display: none;
+		}
+		.hiw-chip-short {
+			display: inline-flex;
+			align-items: center;
+		}
+		.hiw-caption-short {
+			display: inline;
 		}
 		.hiw-caption,
 		.hiw-footnote {
@@ -1016,7 +1214,8 @@ const isActive = (id: NodeId) => first.active.includes(id);
 			margin-right: 0;
 		}
 		.hiw-caption {
-			min-height: 80px;
+			/* Three lines: the longest short caption at 375px. */
+			min-height: 66px;
 			font-size: 17px;
 			line-height: 22px;
 		}
