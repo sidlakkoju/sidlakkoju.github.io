@@ -27,6 +27,8 @@ interface Props {
 	icons?: Icon[];
 	structuredData?: object;
 	bodyClass?: string;
+	/** Keep the page out of search results (the 404 page). */
+	noindex?: boolean;
 }
 
 const defaultIcons: Icon[] = [
@@ -49,6 +51,7 @@ const {
 	icons = defaultIcons,
 	structuredData,
 	bodyClass,
+	noindex = false,
 } = Astro.props;
 
 const ogImageUrl = new URL(ogImage, siteUrl).href;
@@ -62,8 +65,8 @@ const ogImageUrl = new URL(ogImage, siteUrl).href;
 		<title>{title}</title>
 		<meta name="description" content={description} />
 		<meta name="author" content={name} />
-		<meta name="robots" content="index, follow, max-image-preview:large" />
-		<link rel="canonical" href={url} />
+		<meta name="robots" content={noindex ? "noindex" : "index, follow, max-image-preview:large"} />
+		{!noindex && <link rel="canonical" href={url} />}
 		<meta name="theme-color" content="#000000" />
 		<meta name="color-scheme" content="dark" />
 		<meta name="generator" content={Astro.generator} />

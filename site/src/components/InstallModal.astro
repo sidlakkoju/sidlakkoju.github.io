@@ -22,7 +22,7 @@ const allRows = g.platforms.flatMap((p) => p.managers.map((m) => ({ platform: p.
 const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidlakkoju", "// @match https://photos.google.com/*", "// @grant GM.getValue"];
 ---
 
-<dialog class="im" data-install-modal aria-labelledby="im-title" aria-describedby="im-sub">
+<dialog class="im" data-install-modal aria-labelledby="im-title" aria-describedby="im-sub" tabindex="-1">
 	<div class="im-sheet lg-glass-thick" data-platform="all">
 		<header class="im-head">
 			<div class="im-heading">
@@ -46,7 +46,7 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 					<div class="im-picker" role="group" aria-label={g.pickerLabel}>
 						{
 							g.platforms.map((p) => (
-								<button type="button" class="im-chip" data-pick={p.id} aria-pressed="false">
+								<button type="button" class="im-chip lg-hit" data-pick={p.id} aria-pressed="false">
 									{p.chip}
 								</button>
 							))
@@ -76,7 +76,7 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 												<span class="im-row-sub">{m.store}</span>
 											</span>
 											<a
-												class:list={["im-pill", i === 0 ? "im-pill--primary" : "im-pill--glass"]}
+												class:list={["im-pill", "lg-hit", i === 0 ? "im-pill--primary" : "im-pill--glass"]}
 												href={m.href}
 												target="_blank"
 												rel="noopener noreferrer"
@@ -111,7 +111,7 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 											</span>
 										</span>
 										<a
-											class="im-pill im-pill--glass"
+											class="im-pill lg-hit im-pill--glass"
 											href={r.href}
 											target="_blank"
 											rel="noopener noreferrer"
@@ -254,7 +254,7 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 						<span class="lg-visually-hidden">Step 3: </span>{g.steps.open.title}
 						<span class="im-open-extra" data-show="ios" hidden>{g.steps.open.iosExtra}</span>
 					</p>
-					<a class="im-pill im-pill--glass" href={g.steps.open.href} target="_blank" rel="noopener noreferrer" aria-label="Open Google Photos">
+					<a class="im-pill lg-hit im-pill--glass" href={g.steps.open.href} target="_blank" rel="noopener noreferrer" aria-label="Open Google Photos">
 						{g.steps.open.button}
 						<Icon name="external" size={14} />
 					</a>
@@ -264,7 +264,7 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 			<p class="im-safety">
 				<Icon name="shield" size={15} />
 				<span>
-					{g.safety.text} · <a href={g.safety.href} target="_blank" rel="noopener noreferrer">{g.safety.link}</a>
+					{g.safety.text} · <a class="lg-hit" href={g.safety.href} target="_blank" rel="noopener noreferrer">{g.safety.link}</a>
 				</span>
 			</p>
 		</div>
@@ -317,6 +317,9 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 			returnFocus = opener;
 			setPlatform(detected.platform);
 			dialog!.showModal();
+			// Focus the sheet, not its first control: a ring on the close button
+			// the moment it opens reads as a selected control. Tab moves on from here.
+			dialog!.focus();
 			document.documentElement.classList.add("install-open");
 			dialog!.querySelector<HTMLElement>(".im-body")!.scrollTop = 0;
 		}
@@ -355,7 +358,7 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 			const first = items[0];
 			const last = items[items.length - 1];
 			const active = document.activeElement;
-			if (e.shiftKey && (active === first || !dialog.contains(active))) {
+			if (e.shiftKey && (active === first || active === dialog || !dialog.contains(active))) {
 				e.preventDefault();
 				last.focus();
 			} else if (!e.shiftKey && (active === last || !dialog.contains(active))) {
@@ -391,6 +394,9 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 		background: transparent;
 		color: var(--lg-label);
 		font-family: var(--lg-font-text);
+	}
+	.im:focus {
+		outline: none;
 	}
 	.im::backdrop {
 		background: rgba(0, 0, 0, 0.55);
@@ -470,7 +476,12 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 		cursor: pointer;
 	}
-	.im-close:hover {
+	@media (hover: hover) {
+		.im-close:hover {
+			background: rgba(255, 255, 255, 0.22);
+		}
+	}
+	.im-close:active {
 		background: rgba(255, 255, 255, 0.22);
 	}
 
@@ -565,6 +576,13 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 		flex-wrap: wrap;
 		gap: 8px;
 	}
+	/* 32px chips get 44px touch areas (.lg-hit); wrapped rows sit far
+	   enough apart that those areas don't overlap. */
+	@media (pointer: coarse) {
+		.im-picker {
+			row-gap: 12px;
+		}
+	}
 	.im-chip,
 	.im-pill {
 		display: inline-flex;
@@ -588,8 +606,10 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 		background: rgba(255, 255, 255, 0.08);
 		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 	}
-	.im-chip:hover {
-		background: rgba(255, 255, 255, 0.16);
+	@media (hover: hover) {
+		.im-chip:hover {
+			background: rgba(255, 255, 255, 0.16);
+		}
 	}
 	.im-chip[aria-pressed="true"] {
 		background: var(--lg-tint-blue);
@@ -665,15 +685,19 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 		background: var(--lg-tint-blue);
 		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
 	}
-	.im-pill--primary:hover {
-		background: rgba(10, 132, 255, 0.78);
+	@media (hover: hover) {
+		.im-pill--primary:hover {
+			background: rgba(10, 132, 255, 0.78);
+		}
 	}
 	.im-pill--glass {
 		background: rgba(255, 255, 255, 0.1);
 		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 	}
-	.im-pill--glass:hover {
-		background: rgba(255, 255, 255, 0.18);
+	@media (hover: hover) {
+		.im-pill--glass:hover {
+			background: rgba(255, 255, 255, 0.18);
+		}
 	}
 
 	/* Sub-step callout: the crucial extra toggle. */
@@ -714,8 +738,10 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 		text-decoration: none;
 		transition: transform 0.35s var(--lg-ease-spring), background-color 0.2s ease;
 	}
-	.im-cta:hover {
-		background: rgba(10, 132, 255, 0.78);
+	@media (hover: hover) {
+		.im-cta:hover {
+			background: rgba(10, 132, 255, 0.78);
+		}
 	}
 
 	/* ---- Step 3 ---- */
@@ -757,13 +783,15 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 		text-underline-offset: 2px;
 		border-radius: 4px;
 	}
-	.im-safety a:hover {
-		text-decoration-color: currentColor;
+	@media (hover: hover) {
+		.im-safety a:hover {
+			text-decoration-color: currentColor;
+		}
 	}
 
 	.im :is(.im-chip, .im-pill, .im-cta, .im-safety a):focus-visible {
 		outline: 2px solid var(--lg-label);
-		outline-offset: 2px;
+		outline-offset: 3px;
 	}
 
 	/* ---- Illustrations ---- */
@@ -1132,6 +1160,18 @@ const metadata = ["// ==UserScript==", "// @name Photos Swipe", "// @author sidl
 		}
 		.im-title {
 			font-size: 22px;
+		}
+		/* Step 3: the text gets the card's full width and the Open pill
+		   drops below it, at the card's bottom-right corner (inset 16, r16). */
+		.im-card--row {
+			display: grid;
+			grid-template-columns: calc(2 * var(--inner-r)) minmax(0, 1fr);
+			column-gap: 12px;
+			row-gap: 12px;
+		}
+		.im-card--row .im-pill {
+			grid-column: 2;
+			justify-self: end;
 		}
 		.im-vis--window {
 			height: 220px;

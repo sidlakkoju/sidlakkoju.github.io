@@ -14,7 +14,9 @@
 //   - demo -> page: postMessage({ type: "photos-swipe-demo", event: "first-swipe" })
 //     hides the "Drag the photo" coach mark.
 //   - page -> demo: postMessage({ type: "photos-swipe-demo", command: "reset" })
-//     is sent when "Reset" is clicked.
+//     is sent when "Reset" is clicked. The demo reloads itself, so the page
+//     fades the frame out, shows the coach mark again, and fades the frame
+//     back in on its next load.
 //   - Phones (< 700px or touch-first): the frame shows a static preview and
 //     "Try the live demo" opens a full-screen sheet with
 //     <iframe src="/photos-swipe/demo/?scheme=dark"> (no embed=1) and a close button. scheme=dark keeps the demo matching the dark site whatever the OS appearance.
@@ -23,7 +25,7 @@ import { links } from "../data/photos-swipe";
 ---
 
 <div class="demo" data-demo data-src={links.demo}>
-	<div class="demo-badge lg-glass-clear" data-inline-only>
+	<div class="demo-badge" data-inline-only data-glass="clear">
 		<span class="demo-dot" aria-hidden="true"></span>
 		Live demo · try it
 	</div>
@@ -62,7 +64,7 @@ import { links } from "../data/photos-swipe";
 				decoding="async"
 			/>
 			<div class="phone-iframe-host" data-iframe-host></div>
-			<div class="coach lg-glass-clear" data-coach aria-hidden="true">
+			<div class="coach" data-coach aria-hidden="true" data-glass="clear">
 				<Icon name="swipe" size={14} />
 				Drag the photo
 			</div>
@@ -82,11 +84,11 @@ import { links } from "../data/photos-swipe";
 		<span class="lg-caption demo-sheet-caption">Opens full screen · sample photos</span>
 	</div>
 
-	<dialog class="demo-sheet" data-sheet aria-labelledby="demo-sheet-title">
+	<dialog class="demo-sheet" data-sheet aria-labelledby="demo-sheet-title" tabindex="-1">
 		<header class="demo-sheet-bar">
 			<span class="demo-dot" aria-hidden="true"></span>
 			<span id="demo-sheet-title" class="demo-sheet-title">Live demo · sample photos</span>
-			<button type="button" class="demo-sheet-close lg-icon-button lg-glass-clear" data-close-sheet aria-label="Close demo">
+			<button type="button" class="demo-sheet-close lg-icon-button" data-close-sheet aria-label="Close demo" data-glass="clear">
 				<Icon name="close" size={18} />
 			</button>
 		</header>
@@ -125,7 +127,7 @@ import { links } from "../data/photos-swipe";
 			root.classList.toggle("is-inline", !sheetMQ.matches);
 			if (want && !inline) {
 				inline = makeFrame(`${src}?embed=1&top=${STATUS_TOP}&scheme=dark`, "Photos Swipe live demo");
-				inline.addEventListener("load", () => root.classList.add("is-loaded"), { once: true });
+				inline.addEventListener("load", () => root.classList.add("is-loaded"));
 				host.append(inline);
 			} else if (!want && inline && sheetMQ.matches) {
 				inline.remove();
@@ -158,7 +160,12 @@ import { links } from "../data/photos-swipe";
 		});
 
 		root.querySelector("[data-reset]")!.addEventListener("click", () => {
-			inline?.contentWindow?.postMessage({ type: MESSAGE_TYPE, command: "reset" }, location.origin);
+			if (!inline?.contentWindow) return;
+			// The demo reloads: fade it out, bring the coach mark back, and let
+			// the frame's next load fade it in again.
+			root.classList.remove("is-loaded");
+			coach.classList.remove("is-hidden");
+			inline.contentWindow.postMessage({ type: MESSAGE_TYPE, command: "reset" }, location.origin);
 		});
 
 		// Full-screen sheet for phones. Once it has slid up it covers the
@@ -169,6 +176,9 @@ import { links } from "../data/photos-swipe";
 		root.querySelector("[data-open-sheet]")!.addEventListener("click", () => {
 			if (!sheetHost.firstChild) sheetHost.append(makeFrame(`${src}?scheme=dark`, "Photos Swipe live demo"));
 			sheet.showModal();
+			// Focus the sheet itself: a ring on the close button the moment it
+			// opens reads as a selected control.
+			sheet.focus();
 			html.classList.add("sheet-open");
 			if (!sheet.getAnimations().length) cover();
 		});
@@ -367,8 +377,13 @@ import { links } from "../data/photos-swipe";
 		cursor: pointer;
 		border-radius: 4px;
 	}
-	.demo-reset:hover {
-		text-decoration: underline;
+	@media (hover: hover) {
+		.demo-reset:hover {
+			text-decoration: underline;
+		}
+	}
+	.demo-reset:active {
+		opacity: 0.6;
 	}
 
 	.demo-sheet-cta {
@@ -409,6 +424,9 @@ import { links } from "../data/photos-swipe";
 		border: 0;
 		background: #000;
 		color: var(--lg-label);
+	}
+	.demo-sheet:focus {
+		outline: none;
 	}
 	.demo-sheet::backdrop {
 		background: rgba(0, 0, 0, 0.6);
