@@ -1,6 +1,6 @@
 mod glass;
 
-use glass::{Compositor, GlassShape, GlassStyle, Planet, Scene};
+use glass::{view_size, Compositor, GlassShape, GlassStyle, Planet, Scene};
 use macroquad::prelude::*;
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -240,6 +240,14 @@ pub extern "C" fn glass_push(x: f32, y: f32, w: f32, h: f32, radius: f32, alpha:
     });
 }
 
+/// Device px per CSS px for the screen pass. The page caps it below the
+/// display's pixel ratio and lowers it further when frames run long; it
+/// resizes the canvas backing store to match right after.
+#[no_mangle]
+pub extern "C" fn set_render_scale(scale: f32) {
+    glass::set_render_scale(scale);
+}
+
 /// Opacity of the per-body controls (they fade with pause).
 #[no_mangle]
 pub extern "C" fn set_body_ui_alpha(alpha: f32) {
@@ -462,7 +470,7 @@ fn minus_button_center(b: &Body) -> Vec2 {
 
 fn pause_button_rect() -> Rect {
     Rect::new(
-        screen_width() - BTN_MARGIN - BTN_SIZE,
+        view_size().x - BTN_MARGIN - BTN_SIZE,
         BTN_MARGIN,
         BTN_SIZE,
         BTN_SIZE,
@@ -471,7 +479,7 @@ fn pause_button_rect() -> Rect {
 
 fn plus_button_rect() -> Rect {
     Rect::new(
-        screen_width() - BTN_MARGIN - BTN_SIZE * 2.0 - BTN_GAP,
+        view_size().x - BTN_MARGIN - BTN_SIZE * 2.0 - BTN_GAP,
         BTN_MARGIN,
         BTN_SIZE,
         BTN_SIZE,
@@ -665,11 +673,19 @@ fn window_conf() -> Conf {
 const SUBSTEPS: u32 = 8;
 
 /// One frame of input, physics, and rendering.
-fn frame(w: &mut World, overlay: &mut Overlay, compositor: &mut Compositor) {
+/// Per-frame lists, kept between frames so the steady state allocates nothing.
+#[derive(Default)]
+struct Scratch {
+    planets: Vec<Planet>,
+    shapes: Vec<GlassShape>,
+}
+
+fn frame(w: &mut World, overlay: &mut Overlay, compositor: &mut Compositor, scratch: &mut Scratch) {
     // If the canvas resized, translate every body by the delta between
     // the old and new center so the system stays visually centered.
-    let new_cx = screen_width() / 2.0;
-    let new_cy = screen_height() / 2.0;
+    let view = view_size();
+    let new_cx = view.x / 2.0;
+    let new_cy = view.y / 2.0;
     if (new_cx - w.cx).abs() > 0.5 || (new_cy - w.cy).abs() > 0.5 {
         let shift = vec2(new_cx - w.cx, new_cy - w.cy);
         for body in &mut w.bodies {
@@ -779,13 +795,11 @@ fn frame(w: &mut World, overlay: &mut Overlay, compositor: &mut Compositor) {
     // ----- Render -----
     overlay.hero.realize();
     overlay.icons.realize();
-    let planets: Vec<Planet> = w
-        .bodies
-        .iter()
-        .map(|b| Planet { center: b.pos, radius: b.radius, color: b.color })
-        .collect();
+    let Scratch { planets, shapes } = scratch;
+    planets.clear();
+    planets.extend(w.bodies.iter().map(|b| Planet { center: b.pos, radius: b.radius, color: b.color }));
     let scene = Scene {
-        planets: &planets,
+        planets: &planets[..],
         hero: overlay
             .hero
             .texture
@@ -803,12 +817,8 @@ fn frame(w: &mut World, overlay: &mut Overlay, compositor: &mut Compositor) {
 
     // Glass, back to front: panels, then per-body controls, then the small
     // page controls, matching the HTML stacking order.
-    let mut shapes: Vec<GlassShape> = overlay
-        .glass
-        .iter()
-        .filter(|s| matches!(s.style, GlassStyle::Frosted))
-        .copied()
-        .collect();
+    shapes.clear();
+    shapes.extend(overlay.glass.iter().filter(|s| matches!(s.style, GlassStyle::Frosted)).copied());
     if overlay.body_ui_alpha > 0.001 {
         for b in &w.bodies {
             shapes.push(GlassShape {
@@ -828,7 +838,7 @@ fn frame(w: &mut World, overlay: &mut Overlay, compositor: &mut Compositor) {
         }
     }
     shapes.extend(overlay.glass.iter().filter(|s| matches!(s.style, GlassStyle::Clear)).copied());
-    compositor.render(&scene, &arrows, &shapes);
+    compositor.render(&scene, &arrows, &shapes[..]);
 
     if CANVAS_UI {
         if paused {
@@ -857,8 +867,7 @@ async fn main() {
     // Defer initialization until macroquad reports a real viewport size.
     // On web the canvas can report 0×0 for a frame or two after launch.
     loop {
-        let w = screen_width();
-        let h = screen_height();
+        let Vec2 { x: w, y: h } = view_size();
         if w > 1.0 && h > 1.0 {
             WORLD.with_borrow_mut(|world| {
                 world.cx = w / 2.0;
@@ -871,9 +880,10 @@ async fn main() {
     }
 
     let mut compositor = Compositor::new();
+    let mut scratch = Scratch::default();
     loop {
         WORLD.with_borrow_mut(|world| {
-            OVERLAY.with_borrow_mut(|overlay| frame(world, overlay, &mut compositor))
+            OVERLAY.with_borrow_mut(|overlay| frame(world, overlay, &mut compositor, &mut scratch))
         });
         next_frame().await;
     }
