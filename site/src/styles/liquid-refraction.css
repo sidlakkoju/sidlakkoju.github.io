@@ -49,3 +49,11 @@
 	backdrop-filter: var(--lg-refract-filter);
 	clip-path: inset(var(--lg-refract-margin, 0px) round var(--lg-refract-radius, 0px));
 }
+
+/* Hover on refracting controls and cards. The element's own background
+   paints under the refraction layer, so the tint goes on the layer. */
+@media (hover: hover) {
+	:is(a, button)[data-glass][data-glass-active]:hover::before {
+		background-color: var(--lg-glass-fill);
+	}
+}

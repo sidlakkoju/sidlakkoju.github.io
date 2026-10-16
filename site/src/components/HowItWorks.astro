@@ -311,7 +311,9 @@ const isActive = (id: NodeId) => first.active.includes(id);
 					aria-controls="hiw-caption"
 					tabindex={i === 0 ? 0 : -1}
 				>
-					<span class="hiw-chip-progress" aria-hidden="true" />
+					<span class="hiw-chip-track" aria-hidden="true">
+							<span class="hiw-chip-progress" />
+						</span>
 					<span class="hiw-chip-label">{s.chip}</span>
 					<span class="hiw-chip-short">
 						{s.chipShort || (
@@ -423,7 +425,8 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		const wireEls = [...root.querySelectorAll<HTMLElement>("[data-wire]")];
 
 		const reduceMQ = window.matchMedia("(prefers-reduced-motion: reduce)");
-		const desktopMQ = window.matchMedia("(min-width: 760px)");
+		// The 1200px stage needs ~1024px: narrower, its 13px text scales below 11px.
+		const desktopMQ = window.matchMedia("(min-width: 1024px)");
 		let index = 0;
 		let autoplay = !reduceMQ.matches;
 		let inView = false;
@@ -586,6 +589,7 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		line-height: 54px;
 		font-weight: 700;
 		letter-spacing: -1px;
+		text-wrap: balance;
 	}
 	.hiw-sub {
 		margin: 8px 0 0;
@@ -593,6 +597,7 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		line-height: 26px;
 		letter-spacing: -0.4px;
 		color: var(--lg-label-secondary);
+		text-wrap: balance;
 	}
 	.hiw-diagram {
 		width: 100%;
@@ -696,15 +701,17 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		background: var(--lg-glass-fill);
 		box-shadow: var(--lg-hairline), var(--lg-shadow-regular);
 	}
+	/* The first 10px dot is concentric with the tab's 28px corner:
+	   inset 23 on both axes (28 - 23 = 5). The label centers on the dots. */
 	.hiw-tab .hiw-dots {
 		position: absolute;
-		left: 19px;
-		top: 21px;
+		left: 23px;
+		top: 23px;
 	}
 	.hiw-tab .hiw-tab-label {
 		position: absolute;
-		left: 79px;
-		top: 17px;
+		left: 83px;
+		top: 19px;
 	}
 	.hiw-dots {
 		display: inline-flex;
@@ -855,13 +862,15 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		background: var(--lg-glass-fill);
 		box-shadow: var(--lg-hairline), var(--lg-shadow-regular);
 	}
+	/* The first 8px dot is concentric with the tab's 28px corner: inset 24
+	   on both axes (12px padding + 12px), 28 - 24 = 4. */
 	.hiw-m-tabhead {
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		height: 28px;
+		height: 32px;
 		margin-bottom: 8px;
-		padding-left: 6px;
+		padding-left: 12px;
 	}
 	.hiw-m-tabhead .hiw-dots i {
 		width: 8px;
@@ -1097,7 +1106,7 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		}
 	}
 
-	@media (max-width: 759px) {
+	@media (max-width: 1023px) {
 		.hiw {
 			align-items: stretch;
 			text-align: left;
@@ -1117,6 +1126,15 @@ const isActive = (id: NodeId) => first.active.includes(id);
 			margin-top: 16px;
 		}
 	}
+	/* Tablets: the stacked diagram in a centered column. */
+	@media (min-width: 700px) and (max-width: 1023px) {
+		.hiw {
+			width: 100%;
+			max-width: 600px;
+			margin-left: auto;
+			margin-right: auto;
+		}
+	}
 
 	/* ---- Chips + caption ---- */
 	.hiw-chips {
@@ -1128,15 +1146,23 @@ const isActive = (id: NodeId) => first.active.includes(id);
 	}
 	.hiw-chip {
 		position: relative;
-		overflow: hidden;
 		isolation: isolate;
 		background: var(--lg-glass-fill);
 		box-shadow: var(--lg-hairline);
 	}
-	.hiw-chip-progress {
+	/* The progress fill is clipped by its own track, not by the chip, so
+	   the chip's touch area (::after) can reach past its edges. */
+	.hiw-chip-track {
 		position: absolute;
 		inset: 0;
 		z-index: -1;
+		overflow: hidden;
+		border-radius: inherit;
+		pointer-events: none;
+	}
+	.hiw-chip-progress {
+		position: absolute;
+		inset: 0;
 		background: rgba(255, 255, 255, 0.16);
 		transform: scaleX(0);
 		transform-origin: left center;
@@ -1154,7 +1180,8 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		line-height: 20px;
 		letter-spacing: -0.2px;
 		color: var(--lg-label);
-		text-wrap: pretty;
+		/* Centered on wide screens: even lines, no stranded last word. */
+		text-wrap: balance;
 	}
 	.hiw-footnote {
 		max-width: 720px;
@@ -1162,7 +1189,7 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		font-size: 13px;
 		line-height: 18px;
 		color: var(--lg-label-tertiary);
-		text-wrap: pretty;
+		text-wrap: balance;
 	}
 	.hiw-chip-short,
 	.hiw-caption-short {
@@ -1170,7 +1197,7 @@ const isActive = (id: NodeId) => first.active.includes(id);
 	}
 	/* Phones: one row, a segmented control. Track r22 with a 4px inset, so
 	   segments are 36px tall and r18; 8px between segments. */
-	@media (max-width: 759px) {
+	@media (max-width: 1023px) {
 		.hiw-chips {
 			flex-wrap: nowrap;
 			gap: 8px;
@@ -1212,6 +1239,7 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		.hiw-footnote {
 			margin-left: 0;
 			margin-right: 0;
+			text-wrap: pretty;
 		}
 		.hiw-caption {
 			/* Three lines: the longest short caption at 375px. */

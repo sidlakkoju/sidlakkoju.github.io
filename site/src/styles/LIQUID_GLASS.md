@@ -57,6 +57,24 @@ glass.disconnect(); // back to the CSS frosted fallback
   one other than `relative`.
 - Without the script, or where it's unsupported, `[data-glass]` is the frosted
   blur from `.lg-glass-clear` / `.lg-glass-regular`.
+- The refracting layer reaches past the element (see below), which counts as
+  scrollable overflow. Glass near the viewport edge needs a full-width
+  ancestor with `overflow-x: clip` (`.ps-page` and the homepage's `.shelf`
+  have one), or the page scrolls sideways.
+- Hover on a refracting `a`/`button` tints the layer (the element's own
+  background paints under it). Touch hit areas (`.lg-hit` and the `lg-*`
+  button classes) use `::after`, so both pseudo-elements are taken.
+
+### Where it's used
+
+- Homepage: the project cards and the scroll pill, as the fallback when the
+  sim isn't drawing them.
+- Project page: the back chip, the GitHub button, the live demo badge and
+  coach mark (clear), and the demo sheet's close button. Large surfaces
+  (the install sheet, the phone demo panel, the diagram) stay CSS: they sit
+  over smooth washes where refraction is invisible, and a filtered layer
+  that size costs real time while scrolling. On phones the fallback drops
+  its backdrop blur too (one live blur layer per control in iOS Safari).
 
 ### Browser support
 
@@ -92,7 +110,7 @@ The rim samples light from just outside the shape, so the filtered layer extends
 
 ## Render resolution (homepage)
 
-`mq_js_bundle.js` carries three small hooks (see its header). The page caps the
+`mq_js_bundle.js` carries a few small hooks (see its header). The page caps the
 canvas at 2 device px per CSS px and steps down to 1.75, 1.5, 1.25 (times the
 cap) when a quarter of frames run late in two consecutive 30-frame windows. It
 steps back up after a run of clean windows, never within 20 s of that step

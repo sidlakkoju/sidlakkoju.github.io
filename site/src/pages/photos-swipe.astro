@@ -69,7 +69,7 @@ const structuredData = {
 		</div>
 
 		<header class="ps-nav">
-			<a class="lg-chip lg-glass-clear" href="/">
+			<a class="lg-chip" href="/" data-glass="clear" data-back>
 				<Icon name="arrow-left" size={16} />
 				{name}
 			</a>
@@ -78,7 +78,7 @@ const structuredData = {
 		<main class="ps-main">
 			<section class="ps-hero" aria-labelledby="ps-title">
 				<div class="ps-intro">
-					<img class="ps-icon" src="/photos-swipe/icon.png" alt="" width="96" height="96" />
+					<img class="ps-icon" src="/photos-swipe/icon.png" alt="" width="96" height="96" data-morph style="view-transition-name: project-photos-swipe" />
 					<h1 id="ps-title" class="ps-title">{intro.title}</h1>
 					<p class="ps-lede">{intro.lede}</p>
 					<div class="ps-ctas">
@@ -86,7 +86,7 @@ const structuredData = {
 							<Icon name="download" />
 							Install
 						</a>
-						<a class="lg-button lg-button--secondary lg-glass-clear" href={links.github} target="_blank" rel="noopener noreferrer">
+						<a class="lg-button lg-button--secondary" href={links.github} target="_blank" rel="noopener noreferrer" data-glass="clear">
 							<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d={github.path} /></svg>
 							GitHub
 						</a>
@@ -107,7 +107,7 @@ const structuredData = {
 			<nav class="ps-socials" aria-label="Sid Lakkoju elsewhere">
 				{
 					socialIcons.map((s) => (
-						<a href={s.href} target="_blank" rel="me noopener noreferrer" aria-label={`${name} on ${s.label}`}>
+						<a class="lg-hit" href={s.href} target="_blank" rel="me noopener noreferrer" aria-label={`${name} on ${s.label}`}>
 							<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
 								<path d={s.path} />
 							</svg>
@@ -115,12 +115,54 @@ const structuredData = {
 					))
 				}
 			</nav>
-			<p>{name} · <a href="/">sidlakkoju.github.io</a></p>
+			<p>{name} · <a class="lg-hit" href="/" data-back>sidlakkoju.github.io</a></p>
 		</footer>
 	</div>
 
 	<InstallModal />
 </BaseLayout>
+
+<script>
+	import "../styles/liquid-refraction.css";
+	import { initLiquidRefraction } from "../scripts/liquid-refraction";
+
+	// Chromium gets the same refracting glass as the homepage's renderer;
+	// Safari and Firefox keep the frosted fallback (no script work at all).
+	initLiquidRefraction();
+
+	// Arrived from the homepage: going "back" returns to it as the visitor
+	// left it (scroll position, and the sim's state when the page was kept
+	// in the back/forward cache) instead of loading a fresh copy at the top.
+	const fromHome = (() => {
+		try {
+			const ref = new URL(document.referrer);
+			return ref.origin === location.origin && ref.pathname === "/" && history.length > 1;
+		} catch {
+			return false;
+		}
+	})();
+	for (const link of document.querySelectorAll<HTMLAnchorElement>("a[data-back]")) {
+		link.addEventListener("click", (e) => {
+			if (!fromHome || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+			e.preventDefault();
+			history.back();
+		});
+	}
+
+	// The icon morphs into the homepage's project card only when both ends
+	// are on screen: leaving from further down the page, or for a fresh copy
+	// of the homepage (scrolled to the top, card out of view), it just fades.
+	const icon = document.querySelector<HTMLElement>("[data-morph]");
+	window.addEventListener("pageswap", (e) => {
+		if (!icon) return;
+		const r = icon.getBoundingClientRect();
+		const onScreen = r.bottom > 0 && r.top < window.innerHeight;
+		const traverse = (e as Event & { activation?: { navigationType?: string } }).activation?.navigationType === "traverse";
+		if (!onScreen || !traverse) icon.style.viewTransitionName = "none";
+	});
+	// Back from the cache: name it again for the next navigation.
+	window.addEventListener("pageshow", () => icon?.style.setProperty("view-transition-name", "project-photos-swipe"));
+</script>
 
 <style is:global>
 	html {
@@ -279,6 +321,7 @@ const structuredData = {
 		line-height: 1.04;
 		font-weight: 600;
 		letter-spacing: -0.025em;
+		text-wrap: balance;
 	}
 	.ps-lede {
 		margin: 22px 0 0;
@@ -317,7 +360,8 @@ const structuredData = {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 14px;
+		/* 24px keeps the icons' and the link's 44px touch areas apart. */
+		gap: 24px;
 		padding-top: 96px;
 		padding-bottom: max(56px, calc(var(--lg-safe-bottom) + 24px));
 	}
@@ -332,9 +376,22 @@ const structuredData = {
 		border-radius: 6px;
 		transition: opacity 0.2s ease, transform 0.45s var(--lg-ease-spring);
 	}
-	.ps-socials a:hover {
+	@media (hover: hover) {
+		.ps-socials a:hover {
+			opacity: 1;
+			transform: scale(1.12);
+		}
+		.ps-footer p a:hover {
+			color: var(--lg-label);
+		}
+	}
+	.ps-socials a:active {
 		opacity: 1;
-		transform: scale(1.12);
+		transform: scale(0.92);
+		transition-duration: 0.15s;
+	}
+	.ps-footer p a:active {
+		color: var(--lg-label);
 	}
 	.ps-socials svg {
 		width: 22px;
@@ -349,9 +406,6 @@ const structuredData = {
 	.ps-footer p a {
 		color: inherit;
 		text-decoration: none;
-	}
-	.ps-footer p a:hover {
-		color: var(--lg-label-secondary);
 	}
 	.ps-socials a:focus-visible,
 	.ps-footer p a:focus-visible {
@@ -430,8 +484,10 @@ const structuredData = {
 			padding-top: 56px;
 		}
 		/* Backdrop blur over these smooth washes is invisible but costs a
-		   live blur layer per control in iOS Safari; plain glass fill. */
-		.ps-page :global(.lg-glass-clear) {
+		   live blur layer per control in iOS Safari; plain glass fill. (Where
+		   SVG refraction runs, [data-glass-active] draws its own layer.) */
+		.ps-page :global(.lg-glass-clear),
+		.ps-page :global([data-glass]:not([data-glass-active])) {
 			-webkit-backdrop-filter: none;
 			backdrop-filter: none;
 		}

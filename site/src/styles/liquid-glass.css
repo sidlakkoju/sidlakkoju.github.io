@@ -6,7 +6,9 @@
 	--lg-bg: #000;
 	--lg-label: #fff;
 	--lg-label-secondary: rgba(235, 235, 245, 0.62);
-	--lg-label-tertiary: rgba(235, 235, 245, 0.32);
+	/* Apple's tertiary label is 0.3 alpha (about 2.4:1 on black); this one is
+	   raised to meet WCAG AA (4.5:1) for the captions and footnotes it sets. */
+	--lg-label-tertiary: rgba(235, 235, 245, 0.56);
 	--lg-accent-blue: #0a84ff;
 	--lg-accent-red: #ff453a;
 	--lg-accent-green: #30d158;
@@ -55,6 +57,27 @@
 	--lg-safe-right: env(safe-area-inset-right, 0px);
 	--lg-safe-bottom: env(safe-area-inset-bottom, 0px);
 	--lg-safe-left: env(safe-area-inset-left, 0px);
+}
+
+/* ---- Page transitions ----------------------------------------------------
+   Same-origin navigations (the homepage's project cards, the project page's
+   back chip) crossfade, and a project's icon morphs between the two pages
+   (view-transition-name set per page). Browsers without cross-document view
+   transitions navigate as usual. */
+
+@media (prefers-reduced-motion: no-preference) {
+	@view-transition {
+		navigation: auto;
+	}
+	::view-transition-group(*) {
+		animation-duration: 0.5s;
+		animation-timing-function: var(--lg-ease-spring);
+	}
+	::view-transition-old(root),
+	::view-transition-new(root) {
+		animation-duration: 0.3s;
+		animation-timing-function: ease;
+	}
 }
 
 /* ---- Glass materials ---------------------------------------------------
@@ -115,6 +138,7 @@
 .lg-caption {
 	font-size: 13px;
 	line-height: 18px;
+	letter-spacing: -0.08px; /* SF's tracking at 13pt */
 	color: var(--lg-label-secondary);
 }
 
@@ -150,11 +174,13 @@
 .lg-button--primary {
 	background-color: var(--lg-tint-blue);
 }
-.lg-button--primary:hover {
-	background-color: rgba(10, 132, 255, 0.78);
-}
-.lg-button--secondary:hover {
-	background-color: var(--lg-glass-fill-strong);
+@media (hover: hover) {
+	.lg-button--primary:hover {
+		background-color: rgba(10, 132, 255, 0.78);
+	}
+	.lg-button--secondary:hover {
+		background-color: var(--lg-glass-fill-strong);
+	}
 }
 .lg-button--small {
 	height: 40px;
@@ -178,8 +204,10 @@
 	color: var(--lg-label);
 	transition: transform 0.35s var(--lg-ease-spring), background-color 0.2s ease;
 }
-.lg-icon-button:hover {
-	background-color: var(--lg-glass-fill-strong);
+@media (hover: hover) {
+	.lg-icon-button:hover {
+		background-color: var(--lg-glass-fill-strong);
+	}
 }
 .lg-icon-button:active {
 	transform: scale(0.92);
@@ -206,8 +234,10 @@
 	cursor: pointer;
 	transition: transform 0.35s var(--lg-ease-spring), background-color 0.2s ease, color 0.2s ease;
 }
-.lg-chip:hover {
-	background-color: var(--lg-glass-fill-strong);
+@media (hover: hover) {
+	.lg-chip:hover {
+		background-color: var(--lg-glass-fill-strong);
+	}
 }
 .lg-chip:active {
 	transform: scale(0.96);
@@ -215,6 +245,28 @@
 .lg-chip svg {
 	width: 16px;
 	height: 16px;
+}
+
+/* ---- Touch targets -----------------------------------------------------
+   On touch screens every control gets a hit area of at least 44x44px,
+   centered on it, without changing how it looks. Add .lg-hit to anything
+   that isn't one of the button classes. Uses ::after (::before is the
+   refraction layer on [data-glass] elements). */
+
+@media (pointer: coarse) {
+	:where(.lg-hit, .lg-button, .lg-icon-button, .lg-chip) {
+		position: relative;
+	}
+	:where(.lg-hit, .lg-button, .lg-icon-button, .lg-chip)::after {
+		content: "";
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: max(100%, 44px);
+		height: max(100%, 44px);
+		border-radius: inherit;
+		transform: translate(-50%, -50%);
+	}
 }
 
 /* ---- Focus ------------------------------------------------------------- */
