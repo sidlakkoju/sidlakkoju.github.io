@@ -1,16 +1,12 @@
 ---
-const name = "Sid Lakkoju";
-const siteUrl = "https://sidlakkoju.github.io/";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import ProjectCard from "../components/ProjectCard.astro";
+import { name, siteUrl, profiles, projects } from "../data/site";
+
 const title = name;
 const description =
 	"Sid Lakkoju is an engineer at SpaceX. Personal site with links to Sid's YouTube, GitHub, and LinkedIn, plus an interactive three-body gravity simulation.";
 const ogImage = new URL("/og.png", siteUrl).href;
-
-const profiles = {
-	youtube: "https://www.youtube.com/@SidLakkoju",
-	github: "https://github.com/sidlakkoju",
-	linkedin: "https://www.linkedin.com/in/sidlakkoju/",
-};
 
 // One linked graph so search engines can tie the person, the site, and the
 // profile page together (and to the sameAs profiles for the knowledge panel).
@@ -56,49 +52,22 @@ const structuredData = {
 };
 ---
 
-<!doctype html>
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-		<title>{title}</title>
-		<meta name="description" content={description} />
-		<meta name="author" content={name} />
-		<meta name="robots" content="index, follow, max-image-preview:large" />
-		<link rel="canonical" href={siteUrl} />
-		<meta name="theme-color" content="#000000" />
-		<meta name="color-scheme" content="dark" />
-		<meta name="generator" content={Astro.generator} />
-
-		<link rel="icon" href="/favicon.ico" sizes="32x32" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
-		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-		<link rel="sitemap" type="application/xml" href="/sitemap.xml" />
-
+<BaseLayout
+	title={title}
+	description={description}
+	url={siteUrl}
+	ogType="profile"
+	ogImageAlt="Sid Lakkoju, with three orbiting planets"
+	structuredData={structuredData}
+	bodyClass="home"
+>
+	<Fragment slot="head">
 		{Object.values(profiles).map((href) => <link rel="me" href={href} />)}
-
-		<meta property="og:type" content="profile" />
-		<meta property="og:site_name" content={name} />
-		<meta property="og:title" content={title} />
-		<meta property="og:description" content={description} />
-		<meta property="og:url" content={siteUrl} />
-		<meta property="og:image" content={ogImage} />
-		<meta property="og:image:width" content="1200" />
-		<meta property="og:image:height" content="630" />
-		<meta property="og:image:alt" content="Sid Lakkoju, with three orbiting planets" />
 		<meta property="profile:first_name" content="Sid" />
 		<meta property="profile:last_name" content="Lakkoju" />
-		<meta name="twitter:card" content="summary_large_image" />
-		<meta name="twitter:title" content={title} />
-		<meta name="twitter:description" content={description} />
-		<meta name="twitter:image" content={ogImage} />
-
 		<link rel="preload" href="/sim/gravity_simulation.wasm" as="fetch" type="application/wasm" crossorigin />
+	</Fragment>
 
-		<script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
-	</head>
-	<body>
 		<canvas id="glcanvas" tabindex="0" aria-label="Interactive three-body gravity simulation"></canvas>
 
 		<!-- Once the sim is running, the renderer draws this headline and the
@@ -127,6 +96,27 @@ const structuredData = {
 				</a>
 			</nav>
 		</main>
+
+		<a class="scroll-hint lg-glass-clear" href="#projects" aria-label="Scroll to projects">
+			<span>Projects</span>
+			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+		</a>
+
+		<!-- The sim stays fixed behind everything; only this content scrolls. -->
+		<section id="projects" class="shelf" aria-labelledby="projects-title">
+			<h2 id="projects-title" class="lg-eyebrow reveal" style="--i: 0">Projects</h2>
+			<ul class="shelf-grid" role="list">
+				{projects.map((p, i) => (
+					<li class="reveal" style={`--i: ${i + 1}`}>
+						<ProjectCard href={p.href} title={p.title} tagline={p.tagline} icon={p.icon} />
+					</li>
+				))}
+				<!-- Keeps one project from looking lonely. Remove once there are two. -->
+				<li class="reveal" style={`--i: ${projects.length + 1}`}>
+					<div class="more-soon">More soon</div>
+				</li>
+			</ul>
+		</section>
 
 		<!-- Glass UI. Elements marked .glass are drawn by the renderer as
 		     refractive glass at their on-screen rect; the HTML only provides the
@@ -186,6 +176,30 @@ const structuredData = {
 		<script>
 			import { animateFavicon } from "../favicon.js";
 			animateFavicon();
+
+			const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+			const shelf = document.getElementById("projects")!;
+
+			// The hint smooth-scrolls to the shelf (instantly under reduced motion).
+			document.querySelector(".scroll-hint")!.addEventListener("click", (e) => {
+				e.preventDefault();
+				shelf.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "end" });
+			});
+
+			// Browsers without scroll-driven animations (Safari) reveal the shelf
+			// with a staggered transition when it scrolls into view.
+			if (!reduce && !CSS.supports("animation-timeline: view()") && "IntersectionObserver" in window) {
+				shelf.classList.add("io-reveal");
+				new IntersectionObserver(
+					(entries, io) => {
+						if (entries.some((e) => e.isIntersecting)) {
+							shelf.classList.add("in-view");
+							io.disconnect();
+						}
+					},
+					{ rootMargin: "0px 0px -12% 0px" },
+				).observe(shelf.querySelector(".shelf-grid")!);
+			}
 		</script>
 
 		<script is:inline src="/sim/mq_js_bundle.js"></script>
@@ -228,6 +242,21 @@ const structuredData = {
 
 			let paused = false;
 			let layout = null;
+
+			// ---- Page scroll ----------------------------------------------------
+			// The canvas is fixed; the page scrolls over it. While it does, the
+			// headline the renderer draws fades and drifts up a bit faster than
+			// the content (no drift or fade under reduced motion).
+			let scrollY = window.scrollY;
+			let viewportH = window.innerHeight;
+			const DRIFT = 0.35; // extra upward drift per px scrolled
+			const FADE_OVER = 0.5; // fully faded after half a screen
+			function heroScroll() {
+				if (reduce) return { drift: 0, fade: 1 };
+				return { drift: -DRIFT * scrollY, fade: 1 - clamp01(scrollY / (viewportH * FADE_OVER)) };
+			}
+			// The info card belongs to the first screen; scrolling away hides it.
+			const cardWanted = () => paused && scrollY < viewportH * 0.25;
 			const pool = []; // per-body controls; pool[i] belongs to body i
 
 			// ---- Springs --------------------------------------------------------
@@ -267,21 +296,31 @@ const structuredData = {
 			// Measure everything at rest (transforms off) in one forced layout.
 			function measure() {
 				root.classList.add("measuring");
+				// The headline scrolls with the page, so its rects are kept in
+				// document coordinates; the fixed controls stay in viewport ones.
+				const sy = window.scrollY;
+				const docRect = (el) => {
+					const r = rectOf(el);
+					r.y += sy;
+					return r;
+				};
+				scrollY = sy;
+				viewportH = window.innerHeight;
 				layout = {
 					pause: rectOf(pauseBtn),
 					add: rectOf(addBtn),
 					card: rectOf(infoCard),
 					cardRadius: parseFloat(getComputedStyle(infoCard).borderTopLeftRadius),
-					heading: rectOf(heading),
-					tagline: rectOf(tagline),
-					nav: rectOf(nav),
-					icons: iconLinks.map((a) => rectOf(a.querySelector("svg"))),
+					heading: docRect(heading),
+					tagline: docRect(tagline),
+					nav: docRect(nav),
+					icons: iconLinks.map((a) => docRect(a.querySelector("svg"))),
 				};
 				root.classList.remove("measuring");
 				// While the card is up, lift the headline just enough to clear it,
 				// but never under the top buttons.
-				const needed = layout.card.y - 20 - (layout.nav.y + layout.nav.h);
-				layout.lift = Math.max(Math.min(0, needed), -(layout.heading.y - 80));
+				const needed = layout.card.y - 20 - (layout.nav.y - sy + layout.nav.h);
+				layout.lift = Math.max(Math.min(0, needed), -(layout.heading.y - sy - 80));
 				dirty = true;
 			}
 
@@ -363,7 +402,8 @@ const structuredData = {
 			function setPaused(p) {
 				paused = p;
 				root.classList.toggle("paused", p);
-				springs.card.to = springs.add.to = springs.body.to = springs.lift.to = p ? 1 : 0;
+				springs.add.to = springs.body.to = p ? 1 : 0;
+				springs.card.to = springs.lift.to = cardWanted() ? 1 : 0;
 				pauseBtn.setAttribute("aria-pressed", String(p));
 				pauseBtn.setAttribute("aria-label", p ? "Resume simulation" : "Pause simulation");
 				addBtn.tabIndex = p ? 0 : -1;
@@ -417,10 +457,14 @@ const structuredData = {
 
 				const lift = L.lift * springs.lift.x;
 				root.style.setProperty("--hero-shift", `${lift}px`);
-				ex.ui_offset(0, 0, lift);
+				const { drift, fade } = heroScroll();
+				// Layout is in document coordinates; the renderer draws in viewport ones.
+				const heroY = lift + drift - scrollY;
+				ex.ui_offset(0, 0, heroY);
+				ex.ui_alpha?.(0, fade);
 				springs.icons.forEach((s, i) => {
-					const [x, y, w, h] = scaled(L.icons[i], 1 + 0.15 * s.x, 0.5, lift);
-					ex.icon_set(i, x, y, w, h, 0.8 + 0.2 * clamp01(s.x));
+					const [x, y, w, h] = scaled(L.icons[i], 1 + 0.15 * s.x, 0.5, heroY);
+					ex.icon_set(i, x, y, w, h, (0.8 + 0.2 * clamp01(s.x)) * fade);
 				});
 				ex.set_body_ui_alpha(body);
 
@@ -564,6 +608,84 @@ const structuredData = {
 			canvas.addEventListener("pointerdown", () => root.classList.add("dragging"));
 			window.addEventListener("pointerup", () => root.classList.remove("dragging"));
 			window.addEventListener("pointercancel", () => root.classList.remove("dragging"));
+
+			// ---- Scrolling over the sim ------------------------------------
+			// The page scrolls, but macroquad's canvas listeners call
+			// preventDefault on wheel, touch, and some keys, which would block
+			// it. The sim never uses the wheel or these keys, and only uses
+			// touches that land on a body (or its velocity handle) while
+			// paused, so everything else is stopped in the capture phase
+			// before it reaches the canvas and the browser scrolls as usual.
+
+			function onScroll() {
+				scrollY = window.scrollY;
+				const { drift, fade } = heroScroll();
+				root.style.setProperty("--hero-drift", `${drift}px`);
+				root.style.setProperty("--hero-fade", fade.toFixed(3));
+				root.classList.toggle("scrolled", scrollY > 40);
+				const card = cardWanted() ? 1 : 0;
+				if (springs.card.to !== card) springs.card.to = springs.lift.to = card;
+				dirty = true;
+			}
+			window.addEventListener("scroll", onScroll, { passive: true });
+			window.addEventListener("resize", () => {
+				viewportH = window.innerHeight;
+				onScroll();
+			});
+			onScroll();
+
+			window.addEventListener(
+				"wheel",
+				(e) => {
+					if (e.target === canvas) e.stopPropagation();
+				},
+				{ capture: true, passive: true },
+			);
+
+			const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", "Tab"]);
+			window.addEventListener(
+				"keydown",
+				(e) => {
+					if (e.target === canvas && SCROLL_KEYS.has(e.key)) e.stopPropagation();
+				},
+				true,
+			);
+
+			// Touches that start on a body (or its handle) while paused go to
+			// the sim; anything else scrolls the page (touch-action: pan-y).
+			const simTouches = new Set();
+			function grabs(x, y) {
+				const ex = window.wasm_exports;
+				if (!ex || !root.classList.contains("sim-live")) return false;
+				if (ex.grab_at) return ex.grab_at(x, y) !== 0;
+				if (ex.is_paused() === 0) return false;
+				for (let i = 0, n = ex.body_count(); i < n; i++) {
+					const r = ex.body_radius(i) + 16;
+					if ((x - ex.body_x(i)) ** 2 + (y - ex.body_y(i)) ** 2 <= r * r) return true;
+				}
+				return false;
+			}
+			window.addEventListener(
+				"touchstart",
+				(e) => {
+					if (e.target !== canvas) return;
+					for (const t of e.changedTouches) if (grabs(t.clientX, t.clientY)) simTouches.add(t.identifier);
+					if (simTouches.size === 0) e.stopPropagation();
+				},
+				{ capture: true, passive: true },
+			);
+			for (const type of ["touchmove", "touchend", "touchcancel"]) {
+				window.addEventListener(
+					type,
+					(e) => {
+						if (e.target !== canvas) return;
+						const ours = simTouches.size > 0;
+						if (type !== "touchmove") for (const t of e.changedTouches) simTouches.delete(t.identifier);
+						if (!ours) e.stopPropagation();
+					},
+					{ capture: true, passive: true },
+				);
+			}
 		})();
 		</script>
 
@@ -585,21 +707,27 @@ const structuredData = {
 			html, body {
 				margin: 0;
 				padding: 0;
-				height: 100%;
 				background: #000;
 				color: var(--label);
 				font-family: var(--font-text);
 				-webkit-font-smoothing: antialiased;
 				-moz-osx-font-smoothing: grayscale;
 				-webkit-tap-highlight-color: transparent;
-				overflow: hidden;
+			}
+			html {
+				scrollbar-width: thin;
+				scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
 			}
 
 			#glcanvas {
 				position: fixed;
-				inset: 0;
+				top: 0;
+				left: 0;
 				width: 100%;
-				height: 100%;
+				/* The largest viewport, so mobile toolbars collapsing on scroll
+				   don't resize (and re-center) the sim. */
+				height: 100vh;
+				height: 100lvh;
 				display: block;
 				/* Above the HTML headline: once running, the renderer draws the
 				   headline itself so glass can refract it. Transparent until then. */
@@ -609,9 +737,9 @@ const structuredData = {
 				/* macroquad calls canvas.focus() on startup so it gets key events;
 				   without this the browser draws its focus ring around the page. */
 				outline: none;
-				/* Disable native touch gestures so drag interactions aren't
-				   hijacked by the browser's scroll/pinch on mobile. */
-				touch-action: none;
+				/* Vertical swipes scroll the page. Touches that grab a planet are
+				   claimed by the sim (see the touch routing in the page script). */
+				touch-action: pan-y;
 			}
 			.sim-ready #glcanvas {
 				opacity: 1;
@@ -622,7 +750,7 @@ const structuredData = {
 			main {
 				position: relative;
 				min-height: 100vh;
-				min-height: 100dvh;
+				min-height: 100svh;
 				padding: 0 24px;
 				box-sizing: border-box;
 				display: flex;
@@ -642,9 +770,17 @@ const structuredData = {
 				mix-blend-mode: difference;
 			}
 
-			/* Lifted by the page script (a spring) while the info card is up. */
+			/* Lifted by the page script (a spring) while the info card is up, and
+			   drifted/faded as the page scrolls. Once the sim runs it draws the
+			   headline itself, so these mostly keep the hit areas in place. */
 			main > * {
-				transform: translateY(var(--hero-shift, 0px));
+				transform: translateY(calc(var(--hero-shift, 0px) + var(--hero-drift, 0px)));
+			}
+			main {
+				opacity: var(--hero-fade, 1);
+			}
+			.sim-ready main {
+				opacity: 1;
 			}
 
 			main p {
@@ -953,6 +1089,157 @@ const structuredData = {
 			.formula:hover .formula-label {
 				color: var(--label);
 			}
+
+			/* ---- Scroll hint ---- */
+			.scroll-hint {
+				position: absolute;
+				z-index: 2;
+				left: 50%;
+				top: calc(100vh - 74px);
+				top: calc(100svh - 74px - var(--lg-safe-bottom));
+				display: flex;
+				align-items: center;
+				gap: 6px;
+				box-sizing: border-box;
+				height: 38px;
+				padding: 0 14px 0 17px;
+				border-radius: var(--lg-radius-pill);
+				color: var(--label);
+				font-size: 15px;
+				font-weight: 500;
+				line-height: 20px;
+				letter-spacing: -0.2px;
+				text-decoration: none;
+				transform: translateX(-50%);
+				transition: opacity 0.3s ease, visibility 0.3s;
+			}
+			.scroll-hint svg {
+				width: 16px;
+				height: 16px;
+				fill: none;
+				stroke: currentColor;
+				stroke-width: 2.25;
+				stroke-linecap: round;
+				stroke-linejoin: round;
+			}
+			.scroll-hint:focus-visible {
+				outline: 2px solid #fff;
+				outline-offset: 3px;
+			}
+			.scrolled .scroll-hint,
+			.paused .scroll-hint {
+				opacity: 0;
+				visibility: hidden;
+			}
+			@media (prefers-reduced-motion: no-preference) {
+				.scroll-hint {
+					animation: hint-bob 2.6s ease-in-out infinite;
+				}
+			}
+			@keyframes hint-bob {
+				0%,
+				100% {
+					translate: 0 0;
+				}
+				50% {
+					translate: 0 -5px;
+				}
+			}
+
+			/* ---- Projects shelf ----
+			   Sits right below the first screen. The bottom padding lets it
+			   scroll up to the middle of the viewport. */
+			.shelf {
+				--shelf-h: 116px;
+				position: relative;
+				z-index: 2;
+				box-sizing: border-box;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: 16px;
+				padding: 0 24px calc(50vh - var(--shelf-h) / 2);
+				padding: 0 max(24px, var(--lg-safe-right)) calc(50svh - var(--shelf-h) / 2) max(24px, var(--lg-safe-left));
+				/* Let drags on empty space reach the sim behind. */
+				pointer-events: none;
+			}
+			.shelf h2 {
+				margin: 0;
+			}
+			.shelf-grid {
+				display: grid;
+				grid-template-columns: repeat(2, 380px);
+				gap: 16px;
+				margin: 0;
+				padding: 0;
+				list-style: none;
+			}
+			.shelf-grid > li {
+				display: flex;
+				pointer-events: auto;
+			}
+			.more-soon {
+				display: grid;
+				place-items: center;
+				box-sizing: border-box;
+				width: 100%;
+				min-height: 86px;
+				border: 1.5px dashed var(--lg-glass-stroke);
+				border-radius: var(--lg-radius-lg);
+				color: var(--lg-label-tertiary);
+				font-size: 15px;
+				font-weight: 500;
+				line-height: 20px;
+				letter-spacing: -0.2px;
+			}
+			@media (max-width: 820px) {
+				.shelf {
+					--shelf-h: 226px;
+				}
+				.shelf-grid {
+					grid-template-columns: minmax(0, 420px);
+					justify-content: center;
+					width: 100%;
+				}
+				.shelf-grid .project-card,
+				.more-soon {
+					min-height: 90px;
+				}
+			}
+
+			/* Reveal: rises in as it scrolls into view. Scroll-driven where
+			   supported; otherwise .io-reveal + .in-view (IntersectionObserver). */
+			@keyframes shelf-rise {
+				from {
+					opacity: 0;
+					transform: translateY(48px);
+				}
+				to {
+					opacity: 1;
+					transform: none;
+				}
+			}
+			@media (prefers-reduced-motion: no-preference) {
+				@supports (animation-timeline: view()) {
+					.shelf .reveal {
+						animation: shelf-rise linear both;
+						animation-timeline: view();
+						/* Staggered by shifting each item's range a little. */
+						animation-range: entry calc(var(--i) * 4%) cover calc(30% + var(--i) * 4%);
+					}
+				}
+				.io-reveal .reveal {
+					opacity: 0;
+					transform: translateY(48px);
+					transition:
+						opacity 0.6s var(--lg-ease-out),
+						transform 0.8s var(--lg-ease-out);
+					transition-delay: calc(var(--i) * 60ms);
+				}
+				.io-reveal.in-view .reveal {
+					opacity: 1;
+					transform: none;
+				}
+			}
 		</style>
-	</body>
-</html>
+</BaseLayout>

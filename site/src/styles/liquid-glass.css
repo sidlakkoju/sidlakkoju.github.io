@@ -1,0 +1,240 @@
+/* Liquid Glass design tokens (Figma "Liquid Glass" collection, board 9:460).
+   Shared by every page. Page-specific layout lives with each page. */
+
+:root {
+	/* Color */
+	--lg-bg: #000;
+	--lg-label: #fff;
+	--lg-label-secondary: rgba(235, 235, 245, 0.62);
+	--lg-label-tertiary: rgba(235, 235, 245, 0.32);
+	--lg-accent-blue: #0a84ff;
+	--lg-accent-red: #ff453a;
+	--lg-accent-green: #30d158;
+	--lg-glass-fill: rgba(255, 255, 255, 0.07);
+	--lg-glass-fill-strong: rgba(255, 255, 255, 0.14);
+	--lg-glass-stroke: rgba(255, 255, 255, 0.22);
+	--lg-tint-blue: rgba(10, 132, 255, 0.62);
+	--lg-tint-red: rgba(255, 69, 58, 0.58);
+	--lg-orb-silver: #dce1ea;
+	--lg-orb-blue: #2f4bff;
+	--lg-orb-cyan: #5bd6f2;
+
+	/* Radii */
+	--lg-radius-sm: 12px;
+	--lg-radius-md: 20px;
+	--lg-radius-lg: 28px;
+	--lg-radius-xl: 40px;
+	--lg-radius-pill: 999px;
+
+	/* Spacing */
+	--lg-space-1: 4px;
+	--lg-space-2: 8px;
+	--lg-space-3: 12px;
+	--lg-space-4: 16px;
+	--lg-space-5: 24px;
+	--lg-space-6: 32px;
+	--lg-space-7: 48px;
+	--lg-space-8: 64px;
+
+	/* Type. Figma uses Inter only because its renderer can't load SF Pro. */
+	--lg-font-text: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Inter", "Segoe UI", sans-serif;
+	--lg-font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, "Inter", "Segoe UI", sans-serif;
+
+	/* Motion */
+	--lg-ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+	--lg-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+	/* Glass shadows */
+	--lg-shadow-clear: 0 8px 24px rgba(0, 0, 0, 0.25);
+	--lg-shadow-regular: 0 12px 40px rgba(0, 0, 0, 0.35);
+	--lg-shadow-thick: 0 18px 56px rgba(0, 0, 0, 0.45);
+	/* 1px inset hairline plus a faint top-edge specular highlight. */
+	--lg-hairline: inset 0 0 0 1px var(--lg-glass-stroke), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+
+	--lg-safe-top: env(safe-area-inset-top, 0px);
+	--lg-safe-right: env(safe-area-inset-right, 0px);
+	--lg-safe-bottom: env(safe-area-inset-bottom, 0px);
+	--lg-safe-left: env(safe-area-inset-left, 0px);
+}
+
+/* ---- Glass materials ---------------------------------------------------
+   Clear: controls over imagery. Regular: cards and toolbars. Thick: sheets
+   and anything where legibility wins. */
+
+.lg-glass-clear,
+.lg-glass-regular,
+.lg-glass-thick {
+	background-color: var(--lg-glass-fill);
+	box-shadow: var(--lg-hairline), var(--lg-shadow-clear);
+}
+.lg-glass-clear {
+	-webkit-backdrop-filter: blur(6px) saturate(180%);
+	backdrop-filter: blur(6px) saturate(180%);
+}
+.lg-glass-regular {
+	-webkit-backdrop-filter: blur(20px) saturate(160%);
+	backdrop-filter: blur(20px) saturate(160%);
+	box-shadow: var(--lg-hairline), var(--lg-shadow-regular);
+}
+.lg-glass-thick {
+	background-color: var(--lg-glass-fill-strong);
+	-webkit-backdrop-filter: blur(40px) saturate(140%);
+	backdrop-filter: blur(40px) saturate(140%);
+	box-shadow: var(--lg-hairline), var(--lg-shadow-thick);
+}
+
+/* Opaque fallbacks where backdrop blur isn't available. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+	.lg-glass-clear {
+		background-color: rgba(44, 44, 48, 0.86);
+	}
+	.lg-glass-regular {
+		background-color: rgba(30, 30, 34, 0.94);
+	}
+	.lg-glass-thick {
+		background-color: rgb(28, 28, 32);
+	}
+}
+
+/* ---- Type styles ------------------------------------------------------- */
+
+.lg-eyebrow {
+	font-size: 11px;
+	line-height: 14px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--lg-label-tertiary);
+}
+.lg-headline {
+	font-size: 17px;
+	line-height: 22px;
+	font-weight: 600;
+	letter-spacing: -0.4px;
+}
+.lg-caption {
+	font-size: 13px;
+	line-height: 18px;
+	color: var(--lg-label-secondary);
+}
+
+/* ---- Buttons ----------------------------------------------------------- */
+
+.lg-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	box-sizing: border-box;
+	height: 52px;
+	padding: 0 24px;
+	border: 0;
+	border-radius: var(--lg-radius-pill);
+	color: var(--lg-label);
+	font: 600 17px/22px var(--lg-font-text);
+	letter-spacing: -0.4px;
+	text-decoration: none;
+	cursor: pointer;
+	-webkit-user-select: none;
+	user-select: none;
+	transition: transform 0.35s var(--lg-ease-spring), background-color 0.2s ease, box-shadow 0.2s ease;
+}
+.lg-button:active {
+	transform: scale(0.96);
+}
+.lg-button svg {
+	width: 20px;
+	height: 20px;
+	flex: none;
+}
+.lg-button--primary {
+	background-color: var(--lg-tint-blue);
+}
+.lg-button--primary:hover {
+	background-color: rgba(10, 132, 255, 0.78);
+}
+.lg-button--secondary:hover {
+	background-color: var(--lg-glass-fill-strong);
+}
+.lg-button--small {
+	height: 40px;
+	padding: 0 16px;
+	font-size: 15px;
+	line-height: 20px;
+	letter-spacing: -0.2px;
+	gap: 6px;
+}
+.lg-button--small svg {
+	width: 17px;
+	height: 17px;
+}
+
+.lg-icon-button {
+	display: inline-grid;
+	place-items: center;
+	width: 40px;
+	height: 40px;
+	border-radius: var(--lg-radius-pill);
+	color: var(--lg-label);
+	transition: transform 0.35s var(--lg-ease-spring), background-color 0.2s ease;
+}
+.lg-icon-button:hover {
+	background-color: var(--lg-glass-fill-strong);
+}
+.lg-icon-button:active {
+	transform: scale(0.92);
+}
+.lg-icon-button svg {
+	width: 20px;
+	height: 20px;
+}
+
+.lg-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	box-sizing: border-box;
+	height: 36px;
+	padding: 0 14px;
+	border: 0;
+	border-radius: var(--lg-radius-pill);
+	color: var(--lg-label);
+	font: 500 15px/20px var(--lg-font-text);
+	letter-spacing: -0.2px;
+	text-decoration: none;
+	white-space: nowrap;
+	cursor: pointer;
+	transition: transform 0.35s var(--lg-ease-spring), background-color 0.2s ease, color 0.2s ease;
+}
+.lg-chip:hover {
+	background-color: var(--lg-glass-fill-strong);
+}
+.lg-chip:active {
+	transform: scale(0.96);
+}
+.lg-chip svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* ---- Focus ------------------------------------------------------------- */
+
+.lg-focusable:focus-visible,
+.lg-button:focus-visible,
+.lg-icon-button:focus-visible,
+.lg-chip:focus-visible {
+	outline: 2px solid var(--lg-label);
+	outline-offset: 3px;
+}
+
+.lg-visually-hidden {
+	position: absolute !important;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+	border: 0;
+}

@@ -1,0 +1,76 @@
+---
+interface Props {
+	href: string;
+	title: string;
+	tagline: string;
+	icon: string;
+	class?: string;
+}
+const { href, title, tagline, icon, class: className } = Astro.props;
+---
+
+<a class:list={["project-card", "lg-glass-regular", className]} href={href}>
+	<img class="project-card__icon" src={icon} alt="" width="56" height="56" loading="lazy" decoding="async" />
+	<span class="project-card__text">
+		<span class="project-card__title lg-headline">{title}</span>
+		<span class="project-card__tagline lg-caption">{tagline}</span>
+	</span>
+	<svg class="project-card__arrow" viewBox="0 0 24 24" aria-hidden="true">
+		<path d="M7 17 17 7M9 7h8v8" />
+	</svg>
+</a>
+
+<style>
+	.project-card {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+		box-sizing: border-box;
+		width: 100%;
+		min-height: 86px;
+		padding: 14px 20px 14px 14px;
+		border-radius: var(--lg-radius-lg);
+		color: var(--lg-label);
+		text-decoration: none;
+		transition: transform 0.45s var(--lg-ease-spring), background-color 0.2s ease;
+	}
+	.project-card:hover {
+		background-color: var(--lg-glass-fill-strong);
+		transform: translateY(-2px);
+	}
+	.project-card:active {
+		transform: scale(0.98);
+	}
+	.project-card:focus-visible {
+		outline: 2px solid var(--lg-label);
+		outline-offset: 3px;
+	}
+	.project-card__icon {
+		flex: none;
+		width: 56px;
+		height: 56px;
+		border-radius: 13px;
+	}
+	.project-card__text {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		flex: 1;
+		min-width: 0;
+	}
+	.project-card__arrow {
+		flex: none;
+		width: 20px;
+		height: 20px;
+		fill: none;
+		stroke: var(--lg-label-secondary);
+		stroke-width: 2;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		transition: transform 0.45s var(--lg-ease-spring), stroke 0.2s ease;
+	}
+	.project-card:hover .project-card__arrow {
+		stroke: var(--lg-label);
+		transform: translate(2px, -2px);
+	}
+</style>

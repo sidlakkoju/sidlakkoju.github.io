@@ -58,8 +58,9 @@ pub struct Planet {
 /// What the scene pass draws.
 pub struct Scene<'a> {
     pub planets: &'a [Planet],
-    /// Headline texture and where it goes (CSS px); drawn with difference blending.
-    pub hero: Option<(&'a Texture2D, Rect)>,
+    /// Headline texture, where it goes (CSS px), and its opacity; drawn with
+    /// difference blending.
+    pub hero: Option<(&'a Texture2D, Rect, f32)>,
     /// Icon atlas (square cells, left to right) and each icon's rect + opacity.
     pub icons: Option<(&'a Texture2D, &'a [(Rect, f32)])>,
 }
@@ -200,7 +201,7 @@ uniform vec4 Icon0;
 uniform vec4 Icon1;
 uniform vec4 Icon2;
 uniform vec4 IconAlpha;  // per-icon opacity, w = atlas cell count
-uniform vec4 Params;     // x = device px per CSS px for this pass
+uniform vec4 Params;     // x = device px per CSS px for this pass, y = headline opacity
 
 vec3 icon(vec4 rect, float index, float alpha, vec2 q) {
     vec2 uv = (q - rect.xy) / rect.zw;
@@ -215,7 +216,7 @@ vec3 backdrop(vec2 q) {
     vec2 uv = (q - HeroRect.xy) / HeroRect.zw;
     if (HeroRect.z > 0.0 && uv.x >= 0.0 && uv.y >= 0.0 && uv.x <= 1.0 && uv.y <= 1.0) {
         vec4 t = texture2D(HeroTex, uv);
-        c += t.rgb * t.a;
+        c += t.rgb * t.a * Params.y;
     }
     if (IconAlpha.w > 0.0) {
         c += icon(Icon0, 0.0, IconAlpha.x, q);
@@ -461,9 +462,9 @@ impl Compositor {
     /// Draws the scene with the current camera. `scale` is device px per
     /// CSS px for the target (used for analytic antialiasing).
     fn draw_scene(&self, scene: &Scene, scale: f32, overlays: &dyn Fn()) {
-        let (hero_tex, hero_rect) = match scene.hero {
-            Some((t, r)) => (t.clone(), vec4(r.x, r.y, r.w, r.h)),
-            None => (self.empty.clone(), Vec4::ZERO),
+        let (hero_tex, hero_rect, hero_alpha) = match scene.hero {
+            Some((t, r, a)) => (t.clone(), vec4(r.x, r.y, r.w, r.h), a),
+            None => (self.empty.clone(), Vec4::ZERO, 0.0),
         };
         let mut icon_rects = [Vec4::ZERO; 3];
         let mut icon_alpha = Vec4::ZERO;
@@ -485,14 +486,14 @@ impl Compositor {
         self.planet.set_uniform("Icon1", icon_rects[1]);
         self.planet.set_uniform("Icon2", icon_rects[2]);
         self.planet.set_uniform("IconAlpha", icon_alpha);
-        self.planet.set_uniform("Params", vec4(scale, 0.0, 0.0, 0.0));
+        self.planet.set_uniform("Params", vec4(scale, hero_alpha, 0.0, 0.0));
         gl_use_material(&self.planet);
         draw_quads(&self.planet_vertices, &self.planet_indices);
         gl_use_default_material();
 
-        if let Some((tex, dest)) = scene.hero {
+        if let Some((tex, dest, alpha)) = scene.hero.filter(|h| h.2 > 0.0) {
             gl_use_material(&self.difference);
-            draw_texture_ex(tex, dest.x, dest.y, WHITE, DrawTextureParams {
+            draw_texture_ex(tex, dest.x, dest.y, Color::new(1.0, 1.0, 1.0, alpha), DrawTextureParams {
                 dest_size: Some(dest.size()),
                 ..Default::default()
             });

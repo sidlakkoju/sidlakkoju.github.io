@@ -1,0 +1,394 @@
+---
+// Live demo of Photos Swipe in a phone frame.
+//
+// Contract with the demo at /photos-swipe/demo/ (same origin):
+//   - Desktop (>= 700px wide and not touch-first): an inline
+//     <iframe src="/photos-swipe/demo/?embed=1"> rendered at 390x844 and
+//     scaled into the phone frame. It is created only when the frame is near
+//     the viewport.
+//   - demo -> page: postMessage({ type: "photos-swipe-demo", event: "first-swipe" })
+//     hides the "Drag the photo" coach mark.
+//   - page -> demo: postMessage({ type: "photos-swipe-demo", command: "reset" })
+//     is sent when "Reset" is clicked.
+//   - Phones (< 700px or touch-first): the frame shows a static preview and
+//     "Try the live demo" opens a full-screen sheet with
+//     <iframe src="/photos-swipe/demo/"> (no embed=1) and a close button.
+import Icon from "./Icon.astro";
+import { links } from "../data/photos-swipe";
+---
+
+<div class="demo" data-demo data-src={links.demo}>
+	<div class="demo-badge lg-glass-clear" data-inline-only>
+		<span class="demo-dot" aria-hidden="true"></span>
+		Live demo · try it
+	</div>
+
+	<div class="phone">
+		<div class="phone-screen">
+			<img
+				class="phone-preview"
+				src="/photos-swipe/preview.jpg"
+				alt="Photos Swipe on an iPhone: a sunset photo card with keep and trash buttons, and 26.3 MB freed."
+				width="390"
+				height="844"
+				loading="lazy"
+				decoding="async"
+			/>
+			<div class="phone-iframe-host" data-iframe-host></div>
+			<div class="coach lg-glass-clear" data-coach aria-hidden="true">
+				<Icon name="swipe" size={14} />
+				Drag the photo
+			</div>
+		</div>
+		<span class="phone-island" aria-hidden="true"></span>
+	</div>
+
+	<div class="demo-footer" data-inline-only>
+		<span>Sample photos · nothing leaves this page</span>
+		<button type="button" class="demo-reset lg-focusable" data-reset>Reset</button>
+	</div>
+
+	<div class="demo-sheet-cta" data-sheet-only>
+		<button type="button" class="lg-button lg-button--primary lg-button--small" data-open-sheet>
+			<Icon name="expand" size={17} />
+			Try the live demo
+		</button>
+		<span class="lg-caption demo-sheet-caption">Opens full screen · sample photos</span>
+	</div>
+
+	<dialog class="demo-sheet" data-sheet aria-labelledby="demo-sheet-title">
+		<header class="demo-sheet-bar">
+			<span class="demo-dot" aria-hidden="true"></span>
+			<span id="demo-sheet-title" class="demo-sheet-title">Live demo · sample photos</span>
+			<button type="button" class="demo-sheet-close lg-icon-button lg-glass-clear" data-close-sheet aria-label="Close demo">
+				<Icon name="close" size={18} />
+			</button>
+		</header>
+		<div class="demo-sheet-host" data-sheet-host></div>
+	</dialog>
+</div>
+
+<script>
+	const MESSAGE_TYPE = "photos-swipe-demo";
+	const SHEET_MQ = "(max-width: 699px), (hover: none) and (pointer: coarse)";
+
+	for (const root of document.querySelectorAll<HTMLElement>("[data-demo]")) {
+		const src = root.dataset.src!;
+		const host = root.querySelector<HTMLElement>("[data-iframe-host]")!;
+		const coach = root.querySelector<HTMLElement>("[data-coach]")!;
+		const sheet = root.querySelector<HTMLDialogElement>("[data-sheet]")!;
+		const sheetHost = root.querySelector<HTMLElement>("[data-sheet-host]")!;
+		const sheetMQ = window.matchMedia(SHEET_MQ);
+		let inline: HTMLIFrameElement | null = null;
+		let near = false;
+
+		function makeFrame(url: string, title: string) {
+			const f = document.createElement("iframe");
+			f.src = url;
+			f.title = title;
+			f.allow = "fullscreen";
+			f.setAttribute("allowtransparency", "true");
+			return f;
+		}
+
+		// Inline demo: only on desktop, and only once the frame is near view.
+		function syncInline() {
+			const want = near && !sheetMQ.matches;
+			root.classList.toggle("is-inline", !sheetMQ.matches);
+			if (want && !inline) {
+				inline = makeFrame(`${src}?embed=1`, "Photos Swipe live demo");
+				inline.addEventListener("load", () => root.classList.add("is-loaded"), { once: true });
+				host.append(inline);
+			} else if (!want && inline && sheetMQ.matches) {
+				inline.remove();
+				inline = null;
+				root.classList.remove("is-loaded");
+			}
+		}
+
+		new IntersectionObserver(
+			(entries) => {
+				if (entries[0].isIntersecting) {
+					near = true;
+					syncInline();
+				}
+			},
+			{ rootMargin: "400px 0px" },
+		).observe(root);
+		sheetMQ.addEventListener("change", syncInline);
+		syncInline();
+
+		window.addEventListener("message", (e) => {
+			if (e.origin !== location.origin || !inline || e.source !== inline.contentWindow) return;
+			const data = e.data;
+			if (data && data.type === MESSAGE_TYPE && data.event === "first-swipe") coach.classList.add("is-hidden");
+		});
+
+		root.querySelector("[data-reset]")!.addEventListener("click", () => {
+			inline?.contentWindow?.postMessage({ type: MESSAGE_TYPE, command: "reset" }, location.origin);
+		});
+
+		// Full-screen sheet for phones.
+		root.querySelector("[data-open-sheet]")!.addEventListener("click", () => {
+			if (!sheetHost.firstChild) sheetHost.append(makeFrame(src, "Photos Swipe live demo"));
+			sheet.showModal();
+			document.documentElement.classList.add("sheet-open");
+		});
+		root.querySelector("[data-close-sheet]")!.addEventListener("click", () => sheet.close());
+		sheet.addEventListener("close", () => {
+			document.documentElement.classList.remove("sheet-open");
+			// Drop the demo so it starts fresh (and stops running) next time.
+			sheetHost.replaceChildren();
+		});
+	}
+</script>
+
+<style>
+	.demo {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 18px;
+	}
+	.demo-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		height: 36px;
+		padding: 0 15px 0 13px;
+		border-radius: var(--lg-radius-pill);
+		font-size: 15px;
+		font-weight: 500;
+		line-height: 20px;
+		letter-spacing: -0.2px;
+	}
+	.demo-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--lg-accent-green);
+		box-shadow: 0 0 8px rgba(48, 209, 88, 0.8);
+	}
+
+	/* ---- Phone frame: a 390x844 screen scaled by --phone-scale ---- */
+	.phone {
+		--phone-scale: 0.846;
+		--bezel: 10px;
+		position: relative;
+		box-sizing: content-box;
+		width: calc(390px * var(--phone-scale));
+		height: calc(844px * var(--phone-scale));
+		padding: var(--bezel);
+		border-radius: calc(56px * var(--phone-scale) + var(--bezel));
+		background: #0b0b0d;
+		box-shadow:
+			inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+			inset 0 0 0 3px #1c1c20,
+			0 30px 80px rgba(0, 0, 0, 0.55),
+			0 0 0 1px rgba(255, 255, 255, 0.04);
+	}
+	.phone-screen {
+		position: relative;
+		width: 100%;
+		height: 100%;
+		overflow: hidden;
+		border-radius: calc(56px * var(--phone-scale));
+		background: #1a1210;
+		/* Contain the iframe's own compositing so the rounded clip holds. */
+		isolation: isolate;
+	}
+	.phone-preview {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+	.phone-iframe-host {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 390px;
+		height: 844px;
+		transform: scale(var(--phone-scale));
+		transform-origin: 0 0;
+	}
+	.phone-iframe-host :global(iframe) {
+		display: block;
+		width: 390px;
+		height: 844px;
+		border: 0;
+		background: transparent;
+		opacity: 0;
+		transition: opacity 0.4s ease;
+	}
+	.is-loaded .phone-iframe-host :global(iframe) {
+		opacity: 1;
+	}
+	.phone-island {
+		position: absolute;
+		top: calc(var(--bezel) + 22px * var(--phone-scale));
+		left: 50%;
+		width: calc(110px * var(--phone-scale));
+		height: calc(32px * var(--phone-scale));
+		border-radius: 999px;
+		background: #000;
+		transform: translateX(-50%);
+		pointer-events: none;
+	}
+
+	.coach {
+		position: absolute;
+		left: 50%;
+		top: 60%;
+		display: none;
+		align-items: center;
+		gap: 6px;
+		height: 32px;
+		padding: 0 12px;
+		border-radius: var(--lg-radius-pill);
+		font-size: 13px;
+		font-weight: 500;
+		line-height: 17px;
+		white-space: nowrap;
+		transform: translateX(-50%);
+		pointer-events: none;
+		transition: opacity 0.3s ease, transform 0.3s ease;
+	}
+	.is-inline .coach {
+		display: inline-flex;
+	}
+	.coach.is-hidden {
+		opacity: 0;
+		transform: translate(-50%, 6px);
+	}
+	@media (prefers-reduced-motion: no-preference) {
+		.is-inline .coach:not(.is-hidden) {
+			animation: coach-nudge 2.4s ease-in-out infinite;
+		}
+	}
+	@keyframes coach-nudge {
+		0%, 100% {
+			translate: 0 0;
+		}
+		50% {
+			translate: 6px 0;
+		}
+	}
+
+	.demo-footer {
+		display: flex;
+		align-items: baseline;
+		gap: 16px;
+		font-size: 13px;
+		line-height: 18px;
+		color: var(--lg-label-tertiary);
+	}
+	.demo-reset {
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--lg-accent-blue);
+		font: inherit;
+		cursor: pointer;
+		border-radius: 4px;
+	}
+	.demo-reset:hover {
+		text-decoration: underline;
+	}
+
+	.demo-sheet-cta {
+		display: none;
+		flex-direction: column;
+		align-items: center;
+		gap: 16px;
+	}
+	.demo-sheet-caption {
+		color: var(--lg-label-tertiary);
+	}
+
+	/* Inline vs sheet presentation. */
+	.demo:not(.is-inline) [data-inline-only] {
+		display: none;
+	}
+	.demo:not(.is-inline) .demo-sheet-cta {
+		display: flex;
+	}
+	@media (max-width: 699px), (hover: none) and (pointer: coarse) {
+		.demo [data-inline-only] {
+			display: none;
+		}
+		.demo .demo-sheet-cta {
+			display: flex;
+		}
+	}
+
+	/* ---- Full-screen sheet ---- */
+	.demo-sheet {
+		width: 100%;
+		max-width: none;
+		height: 100%;
+		height: 100dvh;
+		max-height: none;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		background: #000;
+		color: var(--lg-label);
+	}
+	.demo-sheet::backdrop {
+		background: rgba(0, 0, 0, 0.6);
+	}
+	.demo-sheet[open] {
+		animation: sheet-up 0.45s var(--lg-ease-spring);
+	}
+	@keyframes sheet-up {
+		from {
+			transform: translateY(40px);
+			opacity: 0;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.demo-sheet[open] {
+			animation: none;
+		}
+	}
+	.demo-sheet[open] {
+		display: flex;
+		flex-direction: column;
+	}
+	.demo-sheet-bar {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		box-sizing: border-box;
+		min-height: 52px;
+		padding: var(--lg-safe-top) max(12px, var(--lg-safe-right)) 0 max(16px, var(--lg-safe-left));
+		padding-top: max(6px, var(--lg-safe-top));
+		padding-bottom: 6px;
+		flex: none;
+	}
+	.demo-sheet-title {
+		flex: 1;
+		font-size: 15px;
+		font-weight: 600;
+		line-height: 20px;
+		letter-spacing: -0.2px;
+	}
+	.demo-sheet-close {
+		flex: none;
+	}
+	.demo-sheet-host {
+		flex: 1;
+		min-height: 0;
+	}
+	.demo-sheet-host :global(iframe) {
+		display: block;
+		width: 100%;
+		height: 100%;
+		border: 0;
+	}
+	:global(html.sheet-open) {
+		overflow: hidden;
+	}
+</style>
