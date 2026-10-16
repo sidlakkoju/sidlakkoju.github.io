@@ -2,20 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'none'; font-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="color-scheme" content="dark light">
 <meta name="robots" content="noindex">
 <title>Photos Swipe demo</title>
-<style>
-  html, body { margin: 0; height: 100%; background: #000; color: rgba(235, 235, 245, 0.62); }
-  body { display: grid; place-items: center; font: 15px/20px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, Inter, sans-serif; }
-</style>
+<link rel="icon" href="data:,">
+<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;color:#fff;font:15px/1.4 -apple-system,BlinkMacSystemFont,system-ui,sans-serif}noscript{display:grid;place-items:center;height:100%;padding:24px;text-align:center}</style>
 </head>
 <body>
-<p>Demo loading…</p>
-<!-- Placeholder. The real demo replaces this whole folder. Contract with the
-     parent page (/photos-swipe/):
-       demo -> parent: postMessage({type:'photos-swipe-demo', event:'first-swipe'})
-       parent -> demo: postMessage({type:'photos-swipe-demo', command:'reset'})
-     ?embed=1 is set when it runs inline in the desktop phone frame. -->
+<noscript>The Photos Swipe demo needs JavaScript.</noscript>
+<script src="photos-swipe-demo.js"></script>
 </body>
 </html>
