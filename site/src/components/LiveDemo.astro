@@ -3,7 +3,7 @@
 //
 // Contract with the demo at /photos-swipe/demo/ (same origin):
 //   - Desktop (>= 700px wide and not touch-first): an inline
-//     <iframe src="/photos-swipe/demo/?embed=1&top=50"> rendered edge to edge
+//     <iframe src="/photos-swipe/demo/?embed=1&top=50&scheme=dark"> rendered edge to edge
 //     at 390x844 and scaled into the phone frame. It is created only when the
 //     frame is near the viewport, and its rendering is skipped
 //     (content-visibility) while it's far offscreen; its state is kept.
@@ -17,7 +17,7 @@
 //     is sent when "Reset" is clicked.
 //   - Phones (< 700px or touch-first): the frame shows a static preview and
 //     "Try the live demo" opens a full-screen sheet with
-//     <iframe src="/photos-swipe/demo/"> (no embed=1) and a close button.
+//     <iframe src="/photos-swipe/demo/?scheme=dark"> (no embed=1) and a close button. scheme=dark keeps the demo matching the dark site whatever the OS appearance.
 import Icon from "./Icon.astro";
 import { links } from "../data/photos-swipe";
 ---
@@ -124,7 +124,7 @@ import { links } from "../data/photos-swipe";
 			const want = near && !sheetMQ.matches;
 			root.classList.toggle("is-inline", !sheetMQ.matches);
 			if (want && !inline) {
-				inline = makeFrame(`${src}?embed=1&top=${STATUS_TOP}`, "Photos Swipe live demo");
+				inline = makeFrame(`${src}?embed=1&top=${STATUS_TOP}&scheme=dark`, "Photos Swipe live demo");
 				inline.addEventListener("load", () => root.classList.add("is-loaded"), { once: true });
 				host.append(inline);
 			} else if (!want && inline && sheetMQ.matches) {
@@ -167,7 +167,7 @@ import { links } from "../data/photos-swipe";
 		const cover = () => sheet.open && html.classList.add("sheet-covered");
 		sheet.addEventListener("animationend", (e) => e.target === sheet && cover());
 		root.querySelector("[data-open-sheet]")!.addEventListener("click", () => {
-			if (!sheetHost.firstChild) sheetHost.append(makeFrame(src, "Photos Swipe live demo"));
+			if (!sheetHost.firstChild) sheetHost.append(makeFrame(`${src}?scheme=dark`, "Photos Swipe live demo"));
 			sheet.showModal();
 			html.classList.add("sheet-open");
 			if (!sheet.getAnimations().length) cover();
