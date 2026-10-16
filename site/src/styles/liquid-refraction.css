@@ -1,0 +1,51 @@
+/* Liquid glass refraction for pages without the WebGL sim.
+   Usage: data-glass="clear" | "frosted" on an element, then call
+   initLiquidRefraction() from src/scripts/liquid-refraction.ts.
+   Docs: src/styles/LIQUID_GLASS.md.
+
+   Without the script, or where SVG backdrop filters don't paint (Safari,
+   Firefox), [data-glass] is the plain frosted material below. Once the
+   script sets [data-glass-active], the element's ::before draws the
+   refracted backdrop and the element itself goes transparent. */
+
+/* ---- Fallback: frosted blur (same values as .lg-glass-clear/-regular) ---- */
+
+:where([data-glass]) {
+	background-color: var(--lg-glass-fill);
+	box-shadow: var(--lg-hairline), var(--lg-shadow-clear);
+}
+:where([data-glass="clear"]) {
+	-webkit-backdrop-filter: blur(6px) saturate(180%);
+	backdrop-filter: blur(6px) saturate(180%);
+}
+:where([data-glass="frosted"]) {
+	-webkit-backdrop-filter: blur(20px) saturate(160%);
+	backdrop-filter: blur(20px) saturate(160%);
+	box-shadow: var(--lg-hairline), var(--lg-shadow-regular);
+}
+
+/* ---- Refraction (set up by the script) ---- */
+
+/* Low specificity so a page's own position (absolute, fixed) wins. */
+:where([data-glass][data-glass-active]) {
+	position: relative;
+}
+[data-glass][data-glass-active] {
+	isolation: isolate;
+	background-color: transparent;
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+	/* The filter draws its own rim highlight, like the WebGL glass. */
+	box-shadow: none;
+}
+/* The refracting layer reaches --lg-refract-margin past the shape (the rim
+   samples light from just outside it) and is clipped back to the shape. */
+[data-glass][data-glass-active]::before {
+	content: "";
+	position: absolute;
+	z-index: -1;
+	inset: calc(-1 * var(--lg-refract-margin, 0px));
+	pointer-events: none;
+	backdrop-filter: var(--lg-refract-filter);
+	clip-path: inset(var(--lg-refract-margin, 0px) round var(--lg-refract-radius, 0px));
+}

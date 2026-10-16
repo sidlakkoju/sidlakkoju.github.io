@@ -15,6 +15,47 @@
 use macroquad::miniquad::{BlendFactor, BlendState, BlendValue, Equation};
 use macroquad::models::{Mesh, Vertex};
 use macroquad::prelude::*;
+use std::sync::atomic::{AtomicU32, Ordering};
+
+/// Device px per CSS px for the screen pass, as an f32's bits (0 = unset).
+/// The page lowers it below the display's pixel ratio to cap or adapt the
+/// render resolution. miniquad reads its dpi scale once at startup, so the
+/// renderer works in CSS px and takes the scale from here instead.
+static RENDER_SCALE: AtomicU32 = AtomicU32::new(0);
+
+pub fn set_render_scale(scale: f32) {
+    RENDER_SCALE.store(if scale > 0.0 { scale } else { 0.0 }.to_bits(), Ordering::Relaxed);
+}
+
+pub fn render_scale() -> f32 {
+    let s = f32::from_bits(RENDER_SCALE.load(Ordering::Relaxed));
+    if s > 0.0 { s } else { screen_dpi_scale() }
+}
+
+/// The canvas size in CSS px, whatever its backing resolution.
+pub fn view_size() -> Vec2 {
+    // screen_width() is the backing size divided by miniquad's startup dpi.
+    vec2(screen_width(), screen_height()) * (screen_dpi_scale() / render_scale())
+}
+
+/// Maps CSS px onto the whole screen, y down (the default camera assumes
+/// miniquad's startup dpi, which no longer matches the backing size).
+struct ScreenCamera(Mat4);
+
+impl Camera for ScreenCamera {
+    fn matrix(&self) -> Mat4 {
+        self.0
+    }
+    fn depth_enabled(&self) -> bool {
+        false
+    }
+    fn render_pass(&self) -> Option<RenderPass> {
+        None
+    }
+    fn viewport(&self) -> Option<(i32, i32, i32, i32)> {
+        None
+    }
+}
 
 /// How a glass shape treats what's behind it.
 #[derive(Clone, Copy)]
@@ -351,11 +392,16 @@ fn push_quad(vertices: &mut Vec<Vertex>, indices: &mut Vec<u16>, rect: Rect, uv:
 /// macroquad batches at most 5000 indices per draw call; stay under it.
 const MAX_QUADS_PER_MESH: usize = 800;
 
-fn draw_quads(vertices: &[Vertex], indices: &[u16]) {
+/// Draws quads through `mesh`, a staging buffer reused every frame so the
+/// steady state allocates nothing.
+fn draw_quads(mesh: &mut Mesh, vertices: &[Vertex], indices: &[u16]) {
     for (v, i) in vertices.chunks(MAX_QUADS_PER_MESH * 4).zip(indices.chunks(MAX_QUADS_PER_MESH * 6)) {
         let base = i[0];
-        let indices = i.iter().map(|x| x - base).collect();
-        draw_mesh(&Mesh { vertices: v.to_vec(), indices, texture: None });
+        mesh.vertices.clear();
+        mesh.vertices.extend_from_slice(v);
+        mesh.indices.clear();
+        mesh.indices.extend(i.iter().map(|x| x - base));
+        draw_mesh(mesh);
     }
 }
 
@@ -377,6 +423,9 @@ pub struct Compositor {
     // Per-frame geometry, rebuilt in place to avoid reallocating.
     planet_vertices: Vec<Vertex>,
     planet_indices: Vec<u16>,
+    glass_vertices: Vec<Vertex>,
+    glass_indices: Vec<u16>,
+    mesh: Mesh,
 }
 
 impl Compositor {
@@ -419,6 +468,9 @@ impl Compositor {
             empty: Texture2D::from_rgba8(1, 1, &[0, 0, 0, 0]),
             planet_vertices: Vec::new(),
             planet_indices: Vec::new(),
+            glass_vertices: Vec::new(),
+            glass_indices: Vec::new(),
+            mesh: Mesh { vertices: Vec::new(), indices: Vec::new(), texture: None },
         }
     }
 
@@ -426,8 +478,9 @@ impl Compositor {
     /// compresses what it shows and the frosted part is blurred anyway, so
     /// full device resolution would only cost fill rate.
     fn ensure_targets(&mut self) {
-        let w = (screen_width().round() as u32).max(1);
-        let h = (screen_height().round() as u32).max(1);
+        let view = view_size();
+        let w = (view.x.round() as u32).max(1);
+        let h = (view.y.round() as u32).max(1);
         if self.targets.as_ref().map_or(true, |t| t.size != (w, h)) {
             let scene = render_target(w, h);
             let (bw, bh) = ((w / 2).max(1), (h / 2).max(1));
@@ -461,7 +514,7 @@ impl Compositor {
 
     /// Draws the scene with the current camera. `scale` is device px per
     /// CSS px for the target (used for analytic antialiasing).
-    fn draw_scene(&self, scene: &Scene, scale: f32, overlays: &dyn Fn()) {
+    fn draw_scene(&mut self, scene: &Scene, scale: f32, overlays: &dyn Fn()) {
         let (hero_tex, hero_rect, hero_alpha) = match scene.hero {
             Some((t, r, a)) => (t.clone(), vec4(r.x, r.y, r.w, r.h), a),
             None => (self.empty.clone(), Vec4::ZERO, 0.0),
@@ -488,7 +541,7 @@ impl Compositor {
         self.planet.set_uniform("IconAlpha", icon_alpha);
         self.planet.set_uniform("Params", vec4(scale, hero_alpha, 0.0, 0.0));
         gl_use_material(&self.planet);
-        draw_quads(&self.planet_vertices, &self.planet_indices);
+        draw_quads(&mut self.mesh, &self.planet_vertices, &self.planet_indices);
         gl_use_default_material();
 
         if let Some((tex, dest, alpha)) = scene.hero.filter(|h| h.2 > 0.0) {
@@ -529,18 +582,22 @@ impl Compositor {
 
     /// Renders a frame: the scene to the screen, plus the glass on top.
     /// `overlays` draws anything else that belongs in the scene (arrows).
-    /// Leaves the default (screen) camera active.
+    /// Leaves a screen camera in CSS px active.
     pub fn render(&mut self, scene: &Scene, overlays: &dyn Fn(), shapes: &[GlassShape]) {
         self.ensure_targets();
         self.build_planet_geometry(scene.planets);
-        let (sw, sh) = (screen_width(), screen_height());
+        let view = view_size();
+        let (sw, sh) = (view.x, view.y);
+        let scale = render_scale();
         let any_glass = shapes.iter().any(|s| s.alpha > 0.001);
 
         if any_glass {
             let targets = self.targets.as_ref().unwrap();
+            let target_scale = targets.size.0 as f32 / sw;
             set_camera(&target_camera(&targets.scene, Rect::new(0.0, 0.0, sw, sh)));
             clear_background(BLACK);
-            self.draw_scene(scene, targets.size.0 as f32 / sw, overlays);
+            self.draw_scene(scene, target_scale, overlays);
+            let targets = self.targets.as_ref().unwrap();
 
             // Half-res blurred copy for the frosted component. Two H+V
             // iterations with growing spread give a smooth, wide falloff.
@@ -556,16 +613,17 @@ impl Compositor {
             }
         }
 
-        set_default_camera();
+        set_camera(&ScreenCamera(Mat4::orthographic_rh_gl(0.0, sw, sh, 0.0, -1.0, 1.0)));
         clear_background(BLACK);
-        self.draw_scene(scene, screen_dpi_scale(), overlays);
+        self.draw_scene(scene, scale, overlays);
 
         if !any_glass {
             return;
         }
-        let targets = self.targets.as_ref().unwrap();
-        let mut vertices = Vec::with_capacity(shapes.len() * 4);
-        let mut indices = Vec::with_capacity(shapes.len() * 6);
+        let mut vertices = std::mem::take(&mut self.glass_vertices);
+        let mut indices = std::mem::take(&mut self.glass_indices);
+        vertices.clear();
+        indices.clear();
         for s in shapes.iter().filter(|s| s.alpha > 0.001) {
             let [frost, darken, lift, refraction] = s.style.params();
             let color = [
@@ -581,11 +639,14 @@ impl Compositor {
             push_quad(&mut vertices, &mut indices, rect, uv, color, normal);
         }
 
+        let targets = self.targets.as_ref().unwrap();
         self.glass.set_texture("SceneTex", targets.scene.texture.clone());
         self.glass.set_texture("BlurTex", targets.blur_a.texture.clone());
-        self.glass.set_uniform("Screen", vec4(sw, sh, screen_dpi_scale(), 0.0));
+        self.glass.set_uniform("Screen", vec4(sw, sh, scale, 0.0));
         gl_use_material(&self.glass);
-        draw_quads(&vertices, &indices);
+        draw_quads(&mut self.mesh, &vertices, &indices);
         gl_use_default_material();
+        self.glass_vertices = vertices;
+        self.glass_indices = indices;
     }
 }

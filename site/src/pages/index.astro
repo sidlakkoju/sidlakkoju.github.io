@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import ProjectCard from "../components/ProjectCard.astro";
+import "../styles/liquid-refraction.css";
 import { name, siteUrl, profiles, projects } from "../data/site";
 
 const title = name;
@@ -97,7 +98,7 @@ const structuredData = {
 			</nav>
 		</main>
 
-		<a class="scroll-hint lg-glass-clear" href="#projects" aria-label="Scroll to projects">
+		<a class="scroll-hint lg-glass-clear" href="#projects" aria-label="Scroll to projects" data-glass="clear">
 			<span>Projects</span>
 			<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
 		</a>
@@ -175,10 +176,20 @@ const structuredData = {
 
 		<script>
 			import { animateFavicon } from "../favicon.js";
+			import { initLiquidRefraction } from "../scripts/liquid-refraction";
 			animateFavicon();
 
 			const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 			const shelf = document.getElementById("projects")!;
+
+			// The sim's renderer draws the shelf's glass once it runs (html.sim-glass).
+			// Without it (reduced motion, no WebGL, wasm failed), the shelf gets the
+			// SVG refraction fallback where supported, else the CSS frosted glass.
+			const glassFallback = () => {
+				if (!document.documentElement.classList.contains("sim-live")) initLiquidRefraction(document);
+			};
+			if (reduce) glassFallback();
+			else setTimeout(glassFallback, 6000);
 
 			// The hint smooth-scrolls to the shelf (instantly under reduced motion).
 			document.querySelector(".scroll-hint")!.addEventListener("click", (e) => {
@@ -212,7 +223,18 @@ const structuredData = {
 			// macroquad's shim exposes `load(path)` once mq_js_bundle.js has run.
 			// Honor prefers-reduced-motion by skipping the sim entirely.
 			const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+			// Render resolution. A full-screen canvas at 3x is ~3.8M pixels a
+			// frame for very little visible gain over 2x, so the backing store
+			// is capped at MAX_SCALE device px per CSS px, and drops further
+			// (SCALE_STEPS) while frames run over budget. miniquad and the input
+			// mapping keep the startup scale (mq_dpi_scale); only the canvas
+			// backing store (mq_render_scale) changes. See mq_js_bundle.js.
+			const MAX_SCALE = 2;
+			const SCALE_STEPS = [1, 0.875, 0.75, 0.625];
+			const deviceScale = () => Math.min(window.devicePixelRatio || 1, MAX_SCALE);
 			if (!reduce) {
+				window.mq_dpi_scale = window.mq_render_scale = deviceScale();
 				load("/sim/gravity_simulation.wasm");
 			} else {
 				document.getElementById("glcanvas").style.display = "none";
@@ -220,8 +242,9 @@ const structuredData = {
 
 			const root = document.documentElement;
 			const canvas = document.getElementById("glcanvas");
-			const heading = document.querySelector("main h1");
-			const tagline = document.querySelector("main p");
+			const main = document.querySelector("main");
+			const heading = main.querySelector("h1");
+			const tagline = main.querySelector("p");
 			const nav = document.querySelector(".social-links");
 			const iconLinks = [...nav.querySelectorAll("a")];
 			const pauseBtn = document.getElementById("pause-btn");
@@ -229,6 +252,10 @@ const structuredData = {
 			const infoCard = document.getElementById("sim-info");
 			const bodyControls = document.getElementById("body-controls");
 			const template = document.getElementById("body-ctl-template");
+			const shelf = document.getElementById("projects");
+			const hint = document.querySelector(".scroll-hint");
+			const revealEls = [...shelf.querySelectorAll(".reveal")];
+			const cardEls = [...shelf.querySelectorAll(".project-card")];
 			const massFormat = new Intl.NumberFormat("en-US");
 
 			// Must match CTL_* in main.rs so the HTML lands on the drawn glass.
@@ -238,39 +265,57 @@ const structuredData = {
 			// Performance model: nothing in the per-frame loop reads layout or
 			// computed styles. Layout is measured once (and on resize), every
 			// animation is a spring computed here, and the DOM and the renderer
-			// are only written when a value actually changes.
+			// are only written when a value actually changes. The page's frame
+			// work runs in mq_before_frame, right before the sim draws, so what
+			// it hands the renderer (scroll offsets, glass shapes) is drawn in
+			// the same frame. When nothing would change on screen the sim frame
+			// is skipped entirely (the canvas keeps its last image).
 
 			let paused = false;
 			let layout = null;
+			let live = false; // page script drives the renderer
+			let glassOn = false; // the renderer draws the shelf's glass
 
 			// ---- Page scroll ----------------------------------------------------
 			// The canvas is fixed; the page scrolls over it. While it does, the
 			// headline the renderer draws fades and drifts up a bit faster than
 			// the content (no drift or fade under reduced motion).
+			//
+			// Anything the canvas draws lags native scrolling by a frame or more
+			// (iOS momentum scrolling especially), so while the page is
+			// actively scrolling the HTML headline and the CSS glass stand in
+			// for the canvas copies, and hand back once scrolling settles.
 			let scrollY = window.scrollY;
 			let viewportH = window.innerHeight;
+			let lastScrollEvent = -Infinity;
+			let scrolling = false;
+			const SCROLL_SETTLE_MS = 180;
 			const DRIFT = 0.35; // extra upward drift per px scrolled
 			const FADE_OVER = 0.5; // fully faded after half a screen
-			function heroScroll() {
-				if (reduce) return { drift: 0, fade: 1 };
-				return { drift: -DRIFT * scrollY, fade: 1 - clamp01(scrollY / (viewportH * FADE_OVER)) };
-			}
+			const heroDrift = () => (reduce ? 0 : -DRIFT * scrollY);
+			const heroFade = () => (reduce ? 1 : 1 - clamp01(scrollY / (viewportH * FADE_OVER)));
 			// The info card belongs to the first screen; scrolling away hides it.
 			const cardWanted = () => paused && scrollY < viewportH * 0.25;
+			const hintWanted = () => scrollY <= 40 && !paused;
 			const pool = []; // per-body controls; pool[i] belongs to body i
 
 			// ---- Springs --------------------------------------------------------
 
+			const spring = (x = 0) => ({ x, v: 0, to: x });
 			const springs = {
-				card: { x: 0, v: 0, to: 0 },
-				add: { x: 0, v: 0, to: 0 },
-				body: { x: 0, v: 0, to: 0 },
-				lift: { x: 0, v: 0, to: 0 },
-				pressPause: { x: 0, v: 0, to: 0 },
-				pressAdd: { x: 0, v: 0, to: 0 },
-				icons: iconLinks.map(() => ({ x: 0, v: 0, to: 0 })),
+				card: spring(),
+				add: spring(),
+				body: spring(),
+				lift: spring(),
+				pressPause: spring(),
+				pressAdd: spring(),
+				hint: spring(hintWanted() ? 1 : 0),
+				shelfGlass: spring(1), // WebGL glass on the shelf (0 while scrolling)
+				icons: iconLinks.map(() => spring()),
+				cardHover: cardEls.map(() => spring()),
+				cardPress: cardEls.map(() => spring()),
 			};
-			const allSprings = () => [springs.card, springs.add, springs.body, springs.lift, springs.pressPause, springs.pressAdd, ...springs.icons];
+			const SPRINGS = Object.values(springs).flat();
 
 			// Slightly underdamped (damping ratio ~0.85), ~0.4s settle: a soft
 			// Apple-style spring with a hint of overshoot.
@@ -286,6 +331,18 @@ const structuredData = {
 			}
 			const clamp01 = (x) => Math.min(1, Math.max(0, x));
 
+			// Cached DOM writes: a style is only touched when its value changes.
+			function setStyle(el, prop, value) {
+				const cache = el._styles || (el._styles = {});
+				if (cache[prop] === value) return;
+				cache[prop] = value;
+				if (prop.startsWith("--")) el.style.setProperty(prop, value);
+				else el.style[prop] = value;
+			}
+			function setClass(name, on) {
+				if (root.classList.contains(name) !== on) root.classList.toggle(name, on);
+			}
+
 			// ---- Layout ---------------------------------------------------------
 
 			function rectOf(el) {
@@ -296,8 +353,8 @@ const structuredData = {
 			// Measure everything at rest (transforms off) in one forced layout.
 			function measure() {
 				root.classList.add("measuring");
-				// The headline scrolls with the page, so its rects are kept in
-				// document coordinates; the fixed controls stay in viewport ones.
+				// Content that scrolls with the page is kept in document
+				// coordinates; the fixed controls stay in viewport ones.
 				const sy = window.scrollY;
 				const docRect = (el) => {
 					const r = rectOf(el);
@@ -307,6 +364,7 @@ const structuredData = {
 				scrollY = sy;
 				viewportH = window.innerHeight;
 				layout = {
+					canvasH: canvas.clientHeight,
 					pause: rectOf(pauseBtn),
 					add: rectOf(addBtn),
 					card: rectOf(infoCard),
@@ -315,13 +373,86 @@ const structuredData = {
 					tagline: docRect(tagline),
 					nav: docRect(nav),
 					icons: iconLinks.map((a) => docRect(a.querySelector("svg"))),
+					// The shelf rises in (opacity + translate) as it scrolls into
+					// view; the page drives that so the glass can follow it exactly.
+					reveal: revealEls.map((el) => ({ el, i: parseFloat(el.style.getPropertyValue("--i")) || 0, ...docRect(el), p: -1 })),
+					hint: docRect(hint),
 				};
+				layout.cards = cardEls.map((el) => ({
+					...docRect(el),
+					radius: parseFloat(getComputedStyle(el).borderTopLeftRadius),
+					reveal: layout.reveal.find((r) => r.el.contains(el)),
+				}));
 				root.classList.remove("measuring");
 				// While the card is up, lift the headline just enough to clear it,
 				// but never under the top buttons.
 				const needed = layout.card.y - 20 - (layout.nav.y - sy + layout.nav.h);
 				layout.lift = Math.max(Math.min(0, needed), -(layout.heading.y - sy - 80));
+				for (const el of [infoCard, main, hint, ...revealEls, ...cardEls]) el._styles = null;
 				dirty = true;
+			}
+
+			// ---- Render resolution ----------------------------------------------
+
+			let scaleLevel = 0;
+			let appliedScale = 0;
+			function applyScale() {
+				const ex = window.wasm_exports;
+				const s = Math.max(1, Math.round(deviceScale() * SCALE_STEPS[scaleLevel] * 8) / 8);
+				if (s === appliedScale) return;
+				appliedScale = s;
+				window.mq_render_scale = s;
+				// resize() is the bundle's: it sizes the backing store and tells the sim.
+				resize(canvas, ex.resize);
+				ex.set_render_scale?.(canvas.width / canvas.clientWidth);
+				redraw(2);
+			}
+
+			// Frame budget: per window of 30 rendered frames, count the ones
+			// that took over 1.5 refresh periods (and over 20ms: 60fps is fine
+			// on a 120Hz display). Two bad windows in a row (a
+			// quarter of frames late) drop a step; a run of clean windows raises
+			// it again, but not soon after that step failed. Frames right after
+			// a change (reallocating the canvas) don't count.
+			// The refresh period estimate is the fastest recent window's
+			// 10th-percentile interval (robust to the odd short catch-up frame),
+			// drifting up 5% a window so one burst of fast frames can't pin it,
+			// and never slower than 60Hz (a device that's slow from the first
+			// frame would otherwise look normal).
+			const budget = { frames: 0, intervals: new Float32Array(30), sorted: new Float32Array(30), period: Infinity, bad: 0, calm: 0, ignore: 10, failedAt: SCALE_STEPS.map(() => -Infinity) };
+			function changeScale(level, now) {
+				const b = budget;
+				if (level > scaleLevel) b.failedAt[scaleLevel] = now;
+				scaleLevel = level;
+				b.bad = b.calm = 0;
+				b.ignore = 10;
+				b.frames = 0;
+				applyScale();
+			}
+			function checkBudget(now, interval) {
+				const b = budget;
+				if (interval <= 0 || interval > 250) return;
+				if (b.ignore > 0) {
+					b.ignore--;
+					return;
+				}
+				b.intervals[b.frames++] = interval;
+				if (b.frames < 30) return;
+				b.frames = 0;
+				b.sorted.set(b.intervals);
+				b.sorted.sort();
+				b.period = Math.max(6.5, Math.min(b.period * 1.05, b.sorted[3], 1000 / 60));
+				const late = Math.max(b.period * 1.5, 20);
+				let slow = 0;
+				for (const x of b.intervals) if (x > late) slow++;
+				if (slow >= 8) {
+					b.calm = 0;
+					if (++b.bad >= 2 && scaleLevel < SCALE_STEPS.length - 1) changeScale(scaleLevel + 1, now);
+				} else {
+					b.bad = 0;
+					if (slow <= 1 && ++b.calm >= 8 && scaleLevel > 0 && now - b.failedAt[scaleLevel - 1] > 20000) changeScale(scaleLevel - 1, now);
+					else if (slow > 1) b.calm = 0;
+				}
 			}
 
 			// ---- Pixel upload into the renderer -------------------------------
@@ -343,9 +474,9 @@ const structuredData = {
 			}
 
 			// Draw the headline + tagline exactly where the HTML lays them out
-			// (at rest), in the same system font, at device resolution.
+			// (at rest), in the same system font, at the render resolution cap.
 			function rasterizeHeadline(ex) {
-				const dpr = window.devicePixelRatio || 1;
+				const dpr = deviceScale();
 				const els = [heading, tagline];
 				const rects = [layout.heading, layout.tagline];
 				const pad = 24;
@@ -362,7 +493,8 @@ const structuredData = {
 					const cs = getComputedStyle(el);
 					ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
 					if ("letterSpacing" in ctx) ctx.letterSpacing = cs.letterSpacing === "normal" ? "0px" : cs.letterSpacing;
-					ctx.globalAlpha = parseFloat(cs.opacity);
+					// The tagline's 0.7 lives in the stylesheet (inline fade aside).
+					ctx.globalAlpha = el === tagline ? 0.7 : 1;
 					const text = el.textContent.trim();
 					const m = ctx.measureText(text);
 					const ascent = m.fontBoundingBoxAscent;
@@ -376,7 +508,7 @@ const structuredData = {
 			// Icon atlas: one square cell per social icon, rendered with headroom
 			// for the hover scale so it stays crisp.
 			function rasterizeIcons(ex) {
-				const dpr = window.devicePixelRatio || 1;
+				const dpr = deviceScale();
 				const cell = Math.ceil(layout.icons[0].w * 1.25 * dpr);
 				const ctx = context2d(cell * iconLinks.length, cell);
 				ctx.fillStyle = "#fff";
@@ -404,35 +536,70 @@ const structuredData = {
 				root.classList.toggle("paused", p);
 				springs.add.to = springs.body.to = p ? 1 : 0;
 				springs.card.to = springs.lift.to = cardWanted() ? 1 : 0;
+				springs.hint.to = hintWanted() ? 1 : 0;
 				pauseBtn.setAttribute("aria-pressed", String(p));
 				pauseBtn.setAttribute("aria-label", p ? "Resume simulation" : "Pause simulation");
 				addBtn.tabIndex = p ? 0 : -1;
 				for (const c of pool) {
 					for (const b of [c.remove, ...c.stepper.querySelectorAll("button")]) b.tabIndex = p ? 0 : -1;
 				}
+				redraw(2);
 			}
 
-			// Glass shape about a rect's center (or bottom edge), scaled.
-			function scaled(r, s, originY = 0.5, dy = 0) {
-				const w = r.w * s;
-				const h = r.h * s;
-				return [r.x + (r.w - w) / 2, r.y + (r.h - h) * originY + dy, w, h];
+			// Glass shapes for this frame, compared with the last frame's so the
+			// renderer is only told about changes. 7 floats per shape.
+			const MAX_SHAPES = 8 + cardEls.length;
+			let shapes = new Float32Array(MAX_SHAPES * 7);
+			let lastShapes = new Float32Array(MAX_SHAPES * 7);
+			let shapeCount = 0;
+			let lastShapeCount = -1;
+			// Pushes a w x h shape at (x, y) scaled by s about its center (or,
+			// with originY = 1, its bottom edge). Off-screen shapes are dropped.
+			function pushShape(x, y, w, h, radius, s, alpha, style, originY = 0.5) {
+				if (alpha <= 0.002 || shapeCount >= MAX_SHAPES) return;
+				const sw = w * s;
+				const sh = h * s;
+				x += (w - sw) / 2;
+				y += (h - sh) * originY;
+				if (y > layout.canvasH || y + sh < 0) return;
+				const o = shapeCount++ * 7;
+				shapes[o] = x;
+				shapes[o + 1] = y;
+				shapes[o + 2] = sw;
+				shapes[o + 3] = sh;
+				shapes[o + 4] = radius * s;
+				shapes[o + 5] = alpha;
+				shapes[o + 6] = style;
 			}
+			function flushShapes(ex) {
+				let same = shapeCount === lastShapeCount;
+				for (let i = 0; same && i < shapeCount * 7; i++) same = Math.abs(shapes[i] - lastShapes[i]) < 0.005;
+				if (same) return;
+				ex.glass_clear();
+				for (let o = 0; o < shapeCount * 7; o += 7) {
+					ex.glass_push(shapes[o], shapes[o + 1], shapes[o + 2], shapes[o + 3], shapes[o + 4], shapes[o + 5], shapes[o + 6]);
+				}
+				[shapes, lastShapes] = [lastShapes, shapes];
+				lastShapeCount = shapeCount;
+				redraw(1);
+			}
+
+			// Values last handed to the renderer, to skip unchanged calls.
+			const sent = { heroY: NaN, heroAlpha: NaN, bodyAlpha: NaN, icons: iconLinks.map(() => [NaN, NaN]) };
 
 			let dirty = true;
-			let lastGlass = "";
-			let lastTime = 0;
 			let shownCard = null;
 			let shownBody = null;
+			let heroDom = false;
 
-			function applyAnimations(ex) {
+			function applyAnimations(ex, now) {
 				const L = layout;
 				const card = springs.card.x;
 				const cardOpacity = clamp01(card);
 				const cardScale = 0.96 + 0.04 * card;
 				const cardY = (1 - card) * 14;
-				infoCard.style.opacity = cardOpacity;
-				infoCard.style.transform = `translateY(${cardY}px) scale(${cardScale})`;
+				setStyle(infoCard, "opacity", String(cardOpacity));
+				setStyle(infoCard, "transform", `translateY(${cardY}px) scale(${cardScale})`);
 				const cardVisible = cardOpacity > 0.002;
 				if (cardVisible !== shownCard) {
 					shownCard = cardVisible;
@@ -441,48 +608,109 @@ const structuredData = {
 
 				const add = springs.add.x;
 				const addScale = (0.4 + 0.6 * add) * (1 - 0.12 * springs.pressAdd.x);
-				addBtn.style.opacity = clamp01(add);
-				addBtn.style.transform = `scale(${addScale})`;
-				addBtn.style.visibility = add > 0.002 ? "visible" : "hidden";
+				setStyle(addBtn, "opacity", String(clamp01(add)));
+				setStyle(addBtn, "transform", `scale(${addScale})`);
+				setStyle(addBtn, "visibility", add > 0.002 ? "visible" : "hidden");
 				const pauseScale = 1 - 0.12 * springs.pressPause.x;
-				pauseBtn.style.transform = `scale(${pauseScale})`;
+				setStyle(pauseBtn, "transform", `scale(${pauseScale})`);
 
 				const body = clamp01(springs.body.x);
-				bodyControls.style.opacity = body;
+				setStyle(bodyControls, "opacity", String(body));
 				const bodyVisible = body > 0.002;
 				if (bodyVisible !== shownBody) {
 					shownBody = bodyVisible;
 					bodyControls.style.visibility = bodyVisible ? "visible" : "hidden";
 				}
 
+				// Headline: the HTML copy keeps the hit areas in place (and shows
+				// while scrolling); the renderer draws it otherwise.
 				const lift = L.lift * springs.lift.x;
-				root.style.setProperty("--hero-shift", `${lift}px`);
-				const { drift, fade } = heroScroll();
+				const drift = heroDrift();
+				const fade = heroFade();
+				setStyle(main, "--hero-shift", `${lift}px`);
+				setStyle(main, "--hero-drift", `${drift}px`);
+				setStyle(main, "--hero-fade", fade.toFixed(3));
+				const dom = scrolling && fade > 0;
+				if (dom !== heroDom) {
+					heroDom = dom;
+					setClass("hero-dom", dom);
+				}
 				// Layout is in document coordinates; the renderer draws in viewport ones.
 				const heroY = lift + drift - scrollY;
-				ex.ui_offset(0, 0, heroY);
-				ex.ui_alpha?.(0, fade);
+				const heroAlpha = heroDom ? 0 : fade;
+				if (heroY !== sent.heroY || heroAlpha !== sent.heroAlpha) {
+					sent.heroY = heroY;
+					sent.heroAlpha = heroAlpha;
+					ex.ui_offset(0, 0, heroY);
+					ex.ui_alpha?.(0, heroAlpha);
+					redraw(1);
+				}
 				springs.icons.forEach((s, i) => {
-					const [x, y, w, h] = scaled(L.icons[i], 1 + 0.15 * s.x, 0.5, heroY);
-					ex.icon_set(i, x, y, w, h, (0.8 + 0.2 * clamp01(s.x)) * fade);
+					const scale = 1 + 0.15 * s.x;
+					const alpha = (0.8 + 0.2 * clamp01(s.x)) * heroAlpha;
+					const last = sent.icons[i];
+					if (scale === last[0] && (alpha === last[1]) && heroY === last[2]) return;
+					last[0] = scale;
+					last[1] = alpha;
+					last[2] = heroY;
+					const r = L.icons[i];
+					const w = r.w * scale;
+					const h = r.h * scale;
+					ex.icon_set(i, r.x + (r.w - w) / 2, r.y + (r.h - h) / 2 + heroY, w, h, alpha);
+					redraw(1);
 				});
-				ex.set_body_ui_alpha(body);
+				if (body !== sent.bodyAlpha) {
+					sent.bodyAlpha = body;
+					ex.set_body_ui_alpha(body);
+					redraw(1);
+				}
 
-				// Glass, back to front: card, then the small controls.
-				const shapes = [];
-				if (cardOpacity > 0) shapes.push([...scaled(L.card, cardScale, 1, cardY), L.cardRadius * cardScale, cardOpacity, 1]);
-				if (add > 0.002) {
-					const r = scaled(L.add, addScale);
-					shapes.push([...r, r[2] / 2, clamp01(add), 0]);
+				// Glass, back to front: panels (frosted), then the small controls
+				// (clear). The renderer keeps that order per style.
+				shapeCount = 0;
+				pushShape(L.card.x, L.card.y + cardY, L.card.w, L.card.h, L.cardRadius, cardScale, cardOpacity, 1, 1);
+				if (glassOn) applyShelf(now);
+				pushShape(L.add.x, L.add.y, L.add.w, L.add.h, L.add.w / 2, addScale, clamp01(add), 0);
+				pushShape(L.pause.x, L.pause.y, L.pause.w, L.pause.h, L.pause.w / 2, pauseScale, 1, 0);
+				if (glassOn) {
+					// The scroll pill bobs (as its CSS animation did) and fades out
+					// once the page scrolls or the sim pauses.
+					const h = clamp01(springs.hint.x);
+					const bob = h > 0.002 ? (-5 * (1 - Math.cos((2 * Math.PI * now) / 2600))) / 2 : 0;
+					setStyle(hint, "opacity", String(h));
+					setStyle(hint, "visibility", h > 0.002 ? "visible" : "hidden");
+					setStyle(hint, "translate", `0 ${bob.toFixed(2)}px`);
+					const r = L.hint;
+					pushShape(r.x, r.y + bob - scrollY, r.w, r.h, r.h / 2, 1, h * springs.shelfGlass.x, 0);
 				}
-				const pr = scaled(L.pause, pauseScale);
-				shapes.push([...pr, pr[2] / 2, 1, 0]);
-				const key = shapes.map((s) => s.map((v) => v.toFixed(2)).join(",")).join(";");
-				if (key !== lastGlass) {
-					lastGlass = key;
-					ex.glass_clear();
-					for (const s of shapes) ex.glass_push(...s);
+				flushShapes(ex);
+			}
+
+			// The shelf: reveal progress follows the CSS view() timeline it
+			// replaces (`entry i*4%` to `cover 30% + i*4%`, linear), and each
+			// project card is frosted glass that moves, fades, and scales with it.
+			function applyShelf(now) {
+				const vh = viewportH;
+				for (const r of layout.reveal) {
+					const d = vh - (r.y - scrollY);
+					const start = r.i * 0.04 * r.h;
+					const end = (0.3 + r.i * 0.04) * (vh + r.h);
+					const p = clamp01((d - start) / (end - start));
+					if (p === r.p) continue;
+					r.p = p;
+					setStyle(r.el, "opacity", p === 1 ? "" : String(p));
+					setStyle(r.el, "transform", p === 1 ? "" : `translateY(${48 * (1 - p)}px)`);
 				}
+				const glass = springs.shelfGlass.x;
+				layout.cards.forEach((c, i) => {
+					const hover = springs.cardHover[i].x;
+					const scale = 1 - 0.02 * springs.cardPress[i].x;
+					const lift = -2 * hover;
+					setStyle(cardEls[i], "transform", hover === 0 && scale === 1 ? "" : `translateY(${lift}px) scale(${scale})`);
+					const p = c.reveal ? c.reveal.p : 1;
+					const y = c.y - scrollY + (c.reveal ? 48 * (1 - p) : 0) + lift;
+					pushShape(c.x, y, c.w, c.h, c.radius, scale, p * glass, 1);
+				});
 			}
 
 			// Body controls only need work while visible, and only for bodies
@@ -517,51 +745,118 @@ const structuredData = {
 				}
 			}
 
-			// Runs right after macroquad's own rAF callback each frame (it's
-			// started once wasm is up, so it's queued behind the sim), so body
-			// controls track the bodies the sim just drew. Glass shapes pushed
-			// here are drawn next frame, which is invisible for these animations.
-			function frame(now) {
+			// Frames the sim must still draw even if nothing else moves.
+			let pendingFrames = 2;
+			const redraw = (n) => (pendingFrames = Math.max(pendingFrames, n));
+			let pointerDown = false;
+			let lastTime = 0;
+			let frameNo = 0;
+			let lastRendered = false;
+			const stats = { rendered: 0, skipped: 0 };
+
+			function setScrolling(on) {
+				scrolling = on;
+				setClass("scrolling", on);
+				const g = springs.shelfGlass;
+				if (on) g.x = g.to = g.v = 0;
+				else g.to = 1;
+				dirty = true;
+			}
+
+			// Runs before each sim frame (mq_before_frame). Returning false
+			// skips the sim's frame: no physics, no GL calls, last image stays.
+			function beforeFrame() {
 				const ex = window.wasm_exports;
-				const dt = Math.min((now - lastTime) / 1000 || 0, 1 / 30);
+				const now = performance.now();
+				const interval = now - lastTime;
+				const dt = Math.min(interval / 1000 || 0, 1 / 30);
 				lastTime = now;
+				frameNo++;
+
+				// Scroll position: read once, before this frame writes anything.
+				const sy = window.scrollY;
+				if (sy !== scrollY) {
+					scrollY = sy;
+					onScrollMoved();
+				}
+				const isScrolling = now - lastScrollEvent < SCROLL_SETTLE_MS;
+				if (isScrolling !== scrolling) setScrolling(isScrolling);
 
 				const p = ex.is_paused() !== 0;
 				if (p !== paused) setPaused(p);
 
 				let moving = false;
-				for (const s of allSprings()) moving = step(s, dt) || moving;
+				for (const s of SPRINGS) moving = step(s, dt) || moving;
+				// The pill's bob is a continuous animation while it's shown.
+				if (glassOn && springs.hint.x > 0.002) moving = true;
 				if (moving || dirty) {
 					dirty = false;
-					applyAnimations(ex);
+					applyAnimations(ex, now);
 				}
-				if (springs.body.x > 0.002) syncBodyControls(ex);
-				requestAnimationFrame(frame);
+
+				// Decide whether the sim draws this frame.
+				let render = true;
+				if (pendingFrames > 0) pendingFrames--;
+				else if (paused) render = pointerDown;
+				// Hero scrolled away and nothing touched: half rate is plenty for
+				// planets drifting behind the shelf.
+				else if (!scrolling && !pointerDown && heroFade() === 0) render = frameNo % 2 === 0;
+
+				if (render && lastRendered) checkBudget(now, interval);
+				lastRendered = render;
+				stats[render ? "rendered" : "skipped"]++;
+				return render;
+			}
+
+			// Runs right after the sim's frame, so body controls track the
+			// bodies it just moved.
+			function afterFrame() {
+				if (springs.body.x > 0.002) syncBodyControls(window.wasm_exports);
 			}
 
 			let rasterizeQueued = false;
 			function relayout() {
 				const ex = window.wasm_exports;
 				rasterizeQueued = false;
+				appliedScale = 0;
+				applyScale();
 				measure();
 				rasterizeHeadline(ex);
 				rasterizeIcons(ex);
+				redraw(2);
 			}
 
+			let tries = 0;
 			async function start() {
 				const ex = window.wasm_exports;
-				// Wait until the sim has run a frame and the system font is ready.
+				// Wait until the sim has run a frame and the system font is ready
+				// (give up after ~20s: the HTML fallback stays).
 				if (!ex?.ui_upload || ex.body_count() === 0) {
-					setTimeout(start, 50);
+					if (++tries < 400) setTimeout(start, 50);
 					return;
 				}
 				await document.fonts.ready;
 				root.classList.add("sim-live");
 				relayout();
-				requestAnimationFrame(frame);
+				live = true;
+				window.mq_before_frame = beforeFrame;
+				window.mq_after_frame = afterFrame;
+				window.simStats = stats;
+				// For debugging and the perf/visual checks: the render scale and
+				// the glass shapes last sent to the renderer.
+				Object.defineProperty(stats, "scale", { get: () => appliedScale, enumerable: true });
+				stats.shapes = () => Array.from(lastShapes.subarray(0, Math.max(0, lastShapeCount) * 7));
+				stats.budget = budget;
 				// Give the renderer two frames to pick up the textures before
-				// the canvas fades in over the HTML headline it replaces.
-				requestAnimationFrame(() => requestAnimationFrame(() => root.classList.add("sim-ready")));
+				// the canvas fades in over the HTML headline it replaces. From
+				// then on it also draws the shelf's glass.
+				requestAnimationFrame(() =>
+					requestAnimationFrame(() => {
+						root.classList.add("sim-ready", "sim-glass");
+						glassOn = true;
+						dirty = true;
+					}),
+				);
 			}
 			if (!reduce) start();
 
@@ -575,7 +870,10 @@ const structuredData = {
 				window.wasm_exports?.set_paused(paused ? 0 : 1);
 				setPaused(!paused);
 			});
-			addBtn.addEventListener("click", () => window.wasm_exports?.add_body());
+			addBtn.addEventListener("click", () => {
+				window.wasm_exports?.add_body();
+				redraw(2);
+			});
 
 			// Press feedback (the glass squishes slightly, then springs back).
 			for (const [el, s] of [[pauseBtn, springs.pressPause], [addBtn, springs.pressAdd]]) {
@@ -586,6 +884,13 @@ const structuredData = {
 				a.addEventListener("pointerenter", (e) => e.pointerType === "mouse" && (springs.icons[i].to = 1));
 				a.addEventListener("pointerleave", () => (springs.icons[i].to = 0));
 			});
+			// Project cards: hover lifts, press squishes; the glass follows.
+			cardEls.forEach((el, i) => {
+				el.addEventListener("pointerenter", (e) => e.pointerType === "mouse" && (springs.cardHover[i].to = 1));
+				el.addEventListener("pointerleave", () => (springs.cardHover[i].to = springs.cardPress[i].to = 0));
+				el.addEventListener("pointerdown", () => (springs.cardPress[i].to = 1));
+				for (const type of ["pointerup", "pointercancel"]) el.addEventListener(type, () => (springs.cardPress[i].to = 0));
+			});
 
 			bodyControls.addEventListener("click", (e) => {
 				const btn = e.target.closest("[data-action]");
@@ -594,6 +899,7 @@ const structuredData = {
 				const i = Number(btn.closest("[data-index]").dataset.index);
 				if (btn.dataset.action === "remove") ex.remove_body(i);
 				else ex.step_mass(i, btn.dataset.action === "heavier" ? 1 : -1);
+				redraw(2);
 			});
 
 			// Clicking a control shouldn't steal focus from the canvas, or Space
@@ -609,6 +915,14 @@ const structuredData = {
 			window.addEventListener("pointerup", () => root.classList.remove("dragging"));
 			window.addEventListener("pointercancel", () => root.classList.remove("dragging"));
 
+			// Input the sim may act on keeps it drawing (it skips idle frames).
+			const wake = () => redraw(2);
+			window.addEventListener("pointerdown", () => ((pointerDown = true), wake()), true);
+			for (const type of ["pointerup", "pointercancel"]) window.addEventListener(type, () => ((pointerDown = false), wake()), true);
+			window.addEventListener("pointermove", () => pointerDown && wake(), true);
+			for (const type of ["keydown", "keyup", "focus", "blur"]) window.addEventListener(type, wake, true);
+			document.addEventListener("visibilitychange", wake);
+
 			// ---- Scrolling over the sim ------------------------------------
 			// The page scrolls, but macroquad's canvas listeners call
 			// preventDefault on wheel, touch, and some keys, which would block
@@ -617,22 +931,36 @@ const structuredData = {
 			// paused, so everything else is stopped in the capture phase
 			// before it reaches the canvas and the browser scrolls as usual.
 
-			function onScroll() {
-				scrollY = window.scrollY;
-				const { drift, fade } = heroScroll();
-				root.style.setProperty("--hero-drift", `${drift}px`);
-				root.style.setProperty("--hero-fade", fade.toFixed(3));
-				root.classList.toggle("scrolled", scrollY > 40);
+			// Things that depend on the scroll position. Once the sim runs this
+			// is called from the frame hook; before that (or without the sim)
+			// from the scroll event.
+			function onScrollMoved() {
+				setClass("scrolled", scrollY > 40);
 				const card = cardWanted() ? 1 : 0;
 				if (springs.card.to !== card) springs.card.to = springs.lift.to = card;
+				springs.hint.to = hintWanted() ? 1 : 0;
 				dirty = true;
+				if (!live) {
+					setStyle(main, "--hero-drift", `${heroDrift()}px`);
+					setStyle(main, "--hero-fade", heroFade().toFixed(3));
+				}
 			}
-			window.addEventListener("scroll", onScroll, { passive: true });
+			window.addEventListener(
+				"scroll",
+				() => {
+					lastScrollEvent = performance.now();
+					if (!live) {
+						scrollY = window.scrollY;
+						onScrollMoved();
+					}
+				},
+				{ passive: true },
+			);
 			window.addEventListener("resize", () => {
 				viewportH = window.innerHeight;
-				onScroll();
+				if (!live) onScrollMoved();
 			});
-			onScroll();
+			onScrollMoved();
 
 			window.addEventListener(
 				"wheel",
@@ -873,8 +1201,101 @@ const structuredData = {
 				transform: none !important;
 				transition: none !important;
 			}
-			.dragging .sim-ui * {
+			.dragging .sim-ui *,
+			.dragging .shelf-grid > li,
+			.dragging .scroll-hint {
 				pointer-events: none !important;
+			}
+			.measuring .shelf .reveal,
+			.measuring .project-card {
+				transform: none !important;
+				animation: none !important;
+				transition: none !important;
+			}
+			.measuring .scroll-hint {
+				translate: none !important;
+				animation: none !important;
+			}
+
+			/* While the page scrolls, the HTML headline stands in for the one the
+			   renderer draws (canvas content trails native scrolling, on iOS by
+			   several frames). Above the canvas and still difference-blended
+			   against it, so it looks the same; it hands back when scrolling
+			   settles. */
+			.hero-dom main h1,
+			.hero-dom main p {
+				position: relative;
+				z-index: 2;
+			}
+			.hero-dom main h1 {
+				opacity: var(--hero-fade, 1);
+			}
+			.hero-dom main p {
+				opacity: calc(0.7 * var(--hero-fade, 1));
+			}
+			.hero-dom .social-links {
+				opacity: var(--hero-fade, 1);
+			}
+			html.hero-dom .social-links svg {
+				opacity: 1;
+			}
+
+			/* ---- Shelf glass drawn by the renderer ----
+			   Once the sim runs, the project cards and the scroll pill are
+			   refractive glass in the renderer (fed from the page script), so the
+			   HTML stops drawing its own blur and fill. The page script also
+			   drives the reveal, hover, press, and bob so the glass can follow. */
+			html.sim-glass .project-card,
+			html.sim-glass .scroll-hint {
+				isolation: isolate;
+				background-color: transparent;
+				-webkit-backdrop-filter: none;
+				backdrop-filter: none;
+				box-shadow: none;
+			}
+			html.sim-glass .project-card {
+				position: relative;
+				transition: background-color 0.2s ease;
+			}
+			html.sim-glass .project-card:hover {
+				background-color: rgba(255, 255, 255, 0.05);
+			}
+			html.sim-glass .shelf .reveal {
+				opacity: 1;
+				transform: none;
+				animation: none;
+				transition: none;
+			}
+			html.sim-glass .scroll-hint {
+				animation: none;
+				transition: none;
+			}
+			/* While scrolling, the renderer's glass would trail the cards, so the
+			   CSS glass stands in and the renderer's fades back in at rest. */
+			html.sim-glass [data-glass]::before {
+				content: "";
+				position: absolute;
+				z-index: -1;
+				inset: 0;
+				border-radius: inherit;
+				pointer-events: none;
+				background-color: var(--lg-glass-fill);
+				-webkit-backdrop-filter: blur(20px) saturate(160%);
+				backdrop-filter: blur(20px) saturate(160%);
+				box-shadow: var(--lg-hairline);
+				clip-path: none;
+				opacity: 0;
+				visibility: hidden;
+				transition: opacity 0.25s ease, visibility 0s 0.25s;
+			}
+			html.sim-glass [data-glass="clear"]::before {
+				-webkit-backdrop-filter: blur(6px) saturate(180%);
+				backdrop-filter: blur(6px) saturate(180%);
+			}
+			html.sim-glass.scrolling [data-glass]::before {
+				opacity: 1;
+				visibility: visible;
+				transition: none;
 			}
 
 			/* ---- Pause / add ---- */
