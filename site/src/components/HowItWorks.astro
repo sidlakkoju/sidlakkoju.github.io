@@ -278,7 +278,8 @@ const isActive = (id: NodeId) => first.active.includes(id);
 					aria-controls="hiw-caption"
 					tabindex={i === 0 ? 0 : -1}
 				>
-					{s.chip}
+					<span class="hiw-chip-progress" aria-hidden="true" />
+					<span class="hiw-chip-label">{s.chip}</span>
 				</button>
 			))
 		}
@@ -302,7 +303,11 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		mobileWires: { id: string; dir: "out" | "in" }[];
 	};
 
-	const STEP_MS = 3500;
+	const STEP_MS = 3600;
+	const STEP_MAX_MS = 7000;
+	const OVERVIEW_MS = 2500;
+	const READ_BASE_MS = 1200;
+	const READ_WORD_MS = 240;
 	const PACKET_MS = 900;
 	const PACKET_GAP = 250;
 	const PACKET_CYCLE = 1600;
@@ -329,6 +334,14 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		let inView = false;
 		let timer = 0;
 		let raf = 0;
+		let remaining = OVERVIEW_MS;
+		let scheduledAt = 0;
+		let progress: Animation | null = null;
+		const dwell = (i: number) => {
+			if (i === 0) return OVERVIEW_MS;
+			const words = `${steps[i].title} ${steps[i].caption}`.trim().split(/\s+/).length;
+			return Math.min(STEP_MAX_MS, Math.max(STEP_MS, READ_BASE_MS + words * READ_WORD_MS));
+		};
 		let stepStart = performance.now();
 
 		// ---- Scale the 1200x600 stage to the frame width ----
@@ -371,12 +384,31 @@ const isActive = (id: NodeId) => first.active.includes(id);
 
 		function startAutoplay() {
 			stopAutoplay();
-			if (autoplay && inView) timer = window.setInterval(() => show(index + 1), STEP_MS);
+			if (!autoplay || !inView || document.hidden) return;
+			scheduledAt = performance.now();
+			timer = window.setTimeout(() => {
+				timer = 0;
+				show(index + 1);
+				remaining = dwell(index);
+				startAutoplay();
+			}, remaining);
+			const bar = chips[index].querySelector<HTMLElement>(".hiw-chip-progress");
+			progress = bar?.animate(
+				[{ transform: `scaleX(${(1 - remaining / dwell(index)).toFixed(3)})` }, { transform: "scaleX(1)" }],
+				{ duration: remaining, easing: "linear", fill: "forwards" },
+			) ?? null;
+		}
+		function pauseAutoplay() {
+			if (timer) remaining = Math.max(0, remaining - (performance.now() - scheduledAt));
+			stopAutoplay();
 		}
 		function stopAutoplay() {
-			window.clearInterval(timer);
+			window.clearTimeout(timer);
 			timer = 0;
+			progress?.cancel();
+			progress = null;
 		}
+		document.addEventListener("visibilitychange", () => (document.hidden ? pauseAutoplay() : startAutoplay()));
 
 		chips.forEach((chip, j) => {
 			chip.addEventListener("click", () => {
@@ -457,10 +489,10 @@ const isActive = (id: NodeId) => first.active.includes(id);
 					startAutoplay();
 					loop();
 				} else {
-					stopAutoplay();
+					pauseAutoplay();
 				}
 			},
-			{ threshold: 0.35 },
+			{ threshold: 0, rootMargin: "0px 0px -20% 0px" },
 		).observe(root);
 
 		desktopMQ.addEventListener("change", loop);
@@ -935,8 +967,20 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		margin-top: 8px;
 	}
 	.hiw-chip {
+		position: relative;
+		overflow: hidden;
+		isolation: isolate;
 		background: var(--lg-glass-fill);
 		box-shadow: var(--lg-hairline);
+	}
+	.hiw-chip-progress {
+		position: absolute;
+		inset: 0;
+		z-index: -1;
+		background: rgba(255, 255, 255, 0.16);
+		transform: scaleX(0);
+		transform-origin: left center;
+		pointer-events: none;
 	}
 	.hiw-chip[aria-pressed="true"] {
 		background: var(--lg-tint-blue);
