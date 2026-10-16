@@ -7,7 +7,7 @@
 - The glass UI and the glass-bead planets are drawn by the Rust renderer (`gravity_simulation/src/glass.rs`), not CSS. HTML elements marked `.glass` only supply content, layout, and hit areas.
 - Performance: the page script never reads layout or computed styles per frame. Layout is measured once (and on resize), UI animations are JS springs, and the renderer/DOM are written only when values change. Keep it that way.
 - The headline and social icons are rasterized by the page and drawn inside the scene so the glass can refract them. Per-body control sizes are duplicated in `main.rs` (`CTL_*`) and `index.astro`; keep them in sync.
-- After changing Rust, rebuild the wasm (`cargo build --release --target wasm32-unknown-unknown`) and copy it to `site/public/sim/`.
+- After changing Rust, rebuild the wasm (`cargo build --release --target wasm32-unknown-unknown`), then optimize it into `site/public/sim/` the same way CI does: `npx --yes -p binaryen@132.0.0 wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals gravity_simulation/target/wasm32-unknown-unknown/release/gravity_simulation.wasm -o site/public/sim/gravity_simulation.wasm`.
 
 ## Pages and shared styles
 - `site/src/layouts/BaseLayout.astro` owns the `<head>` (SEO, OG, icons, JSON-LD); pages add extras through its `head` slot. Liquid Glass tokens (`--lg-*`) and glass/button classes live in `site/src/styles/liquid-glass.css`. Don't name new classes `.glass`: on the homepage that class marks shapes the renderer draws.
