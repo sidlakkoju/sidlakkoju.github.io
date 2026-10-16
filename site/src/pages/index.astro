@@ -346,7 +346,18 @@ const structuredData = {
 			let lastScrollEvent = -Infinity;
 			let scrolling = false;
 			const SCROLL_SETTLE_MS = 180;
-			const DRIFT = 0.35; // extra upward drift per px scrolled
+			// Touch devices scroll natively instead (see "Touch scrolling"
+			// below): iOS Safari runs page animation at 60fps at most while it
+			// scrolls at the display's 120Hz, so nothing that moves with the page
+			// may be positioned from script there.
+			const touchScroll = matchMedia("(pointer: coarse)").matches;
+			const viewTimeline = CSS.supports("animation-timeline: view()");
+			let touchActive = false;
+			let nativeMode = false;
+			const NATIVE_SETTLE_MS = 300;
+			if (touchScroll) root.classList.add("touch-scroll");
+			// No parallax drift on touch: it would have to be written every frame.
+			const DRIFT = touchScroll ? 0 : 0.35; // extra upward drift per px scrolled
 			const FADE_OVER = 0.5; // fully faded after half a screen
 			const heroDrift = () => (reduce ? 0 : -DRIFT * scrollY);
 			const heroFade = () => (reduce ? 1 : 1 - clamp01(scrollY / (viewportH * FADE_OVER)));
@@ -367,6 +378,11 @@ const structuredData = {
 				pressAdd: spring(),
 				pressHint: spring(),
 				hint: spring(hintWanted() ? 1 : 0),
+				// Touch: how much of the shelf's glass the renderer draws (0
+				// while the page scrolls natively and CSS glass stands in), and
+				// the time-based reveal where scroll-driven animations are missing.
+				glassMix: spring(1),
+				shelfReveal: spring(0),
 				icons: iconLinks.map(() => spring()),
 				cardHover: cardEls.map(() => spring()),
 				cardPress: cardEls.map(() => spring()),
@@ -442,6 +458,7 @@ const structuredData = {
 					reveal: layout.reveal.find((r) => r.el.contains(el)),
 				}));
 				root.classList.remove("measuring");
+				layout.maxScroll = Math.max(0, document.documentElement.scrollHeight - viewportH);
 				setStyle(shelf, "--shelf-content-h", `${shelfH}px`);
 				// While the card is up, lift the headline just enough to clear it,
 				// but never under the top buttons.
@@ -733,17 +750,19 @@ const structuredData = {
 				pushShape(L.pause.x, L.pause.y, L.pause.w, L.pause.h, L.pause.w / 2, pauseScale, 1, 0);
 				if (glassOn) {
 					// The scroll pill bobs (as its CSS animation did) and fades out
-					// once the page scrolls or the sim pauses.
+					// once the page scrolls or the sim pauses. On touch it rests
+					// while the page scrolls natively.
 					const h = clamp01(springs.hint.x);
-					const bob = h > 0.002 ? (-5 * (1 - Math.cos((2 * Math.PI * now) / 2600))) / 2 : 0;
+					const still = touchScroll && nativeMode;
+					const bob = h > 0.002 && !still ? (-5 * (1 - Math.cos((2 * Math.PI * now) / 2600))) / 2 : 0;
 					const hintScale = 1 - 0.06 * springs.pressHint.x;
 					const r = L.hint;
 					setStyle(hint, "opacity", String(h));
 					setStyle(hint, "visibility", h > 0.002 ? "visible" : "hidden");
-					// Fixed: placed in the viewport, in step with its glass.
-					setStyle(hint, "translate", `0 ${(r.y + bob - scrollY).toFixed(2)}px`);
+					// Fixed (or, on touch, in the page): placed in step with its glass.
+					setStyle(hint, "translate", touchScroll ? (still ? "" : `0 ${bob.toFixed(2)}px`) : `0 ${(r.y + bob - scrollY).toFixed(2)}px`);
 					setStyle(hint, "scale", hintScale === 1 ? "" : hintScale.toFixed(4));
-					pushShape(r.x, r.y + bob - scrollY, r.w, r.h, r.h / 2, hintScale, h, 0);
+					pushShape(r.x, r.y + bob - scrollY, r.w, r.h, r.h / 2, hintScale, h * glassMix(), 0);
 				}
 				flushShapes(ex);
 			}
@@ -753,19 +772,26 @@ const structuredData = {
 			// project card is frosted glass that moves, fades, and scales with it.
 			// The shelf itself is fixed and placed here from the same scroll
 			// position as the glass, so the two never drift apart.
+			//
+			// On touch the shelf stays in the page and scrolls natively; its
+			// reveal is CSS (scroll-driven, or the time-based fallback), and the
+			// glass only follows it here while the page is at rest.
 			function applyShelf(now) {
 				const vh = viewportH;
-				setStyle(shelfContent, "transform", `translate3d(0, ${layout.shelfY - scrollY}px, 0)`);
+				if (!touchScroll) setStyle(shelfContent, "transform", `translate3d(0, ${layout.shelfY - scrollY}px, 0)`);
+				const timed = touchScroll && !viewTimeline;
 				for (const r of layout.reveal) {
 					const d = vh - (r.y - scrollY);
 					const start = r.i * 0.04 * r.h;
 					const end = (0.3 + r.i * 0.04) * (vh + r.h);
-					const p = clamp01((d - start) / (end - start));
+					const p = timed ? clamp01(springs.shelfReveal.x) : clamp01((d - start) / (end - start));
 					if (p === r.p) continue;
 					r.p = p;
+					if (touchScroll) continue;
 					setStyle(r.el, "opacity", p === 1 ? "" : String(p));
 					setStyle(r.el, "transform", p === 1 ? "" : `translateY(${48 * (1 - p)}px)`);
 				}
+				const mix = glassMix();
 				layout.cards.forEach((c, i) => {
 					const hover = springs.cardHover[i].x;
 					const scale = 1 - 0.02 * springs.cardPress[i].x;
@@ -773,7 +799,7 @@ const structuredData = {
 					setStyle(cardEls[i], "transform", hover === 0 && scale === 1 ? "" : `translateY(${lift}px) scale(${scale})`);
 					const p = c.reveal ? c.reveal.p : 1;
 					const y = c.y - scrollY + (c.reveal ? 48 * (1 - p) : 0) + lift;
-					pushShape(c.x, y, c.w, c.h, c.radius, scale, p, 1);
+					pushShape(c.x, y, c.w, c.h, c.radius, scale, p * mix, 1);
 				});
 			}
 
@@ -823,6 +849,31 @@ const structuredData = {
 				dirty = true;
 			}
 
+			// ---- Touch scrolling ------------------------------------------------
+			// From the first touch (or scroll) until the page has been still for
+			// a moment, everything that moves with it scrolls natively at the
+			// display's rate: the HTML headline stands in for the drawn one, and
+			// the shelf and pill wear CSS glass while the renderer's fades out.
+			// Once still, the renderer's glass fades back in where they are.
+			const glassMix = () => (touchScroll ? clamp01(springs.glassMix.x) : 1);
+			function enterNative() {
+				if (!touchScroll || nativeMode) return;
+				nativeMode = true;
+				setClass("scroll-native", true);
+				const g = springs.glassMix;
+				g.x = g.to = g.v = 0;
+				setScrolling(true);
+				if (live && layout) applyAnimations(window.wasm_exports, performance.now());
+			}
+			function settleNative(now) {
+				if (!nativeMode || touchActive || now - lastScrollEvent < NATIVE_SETTLE_MS) return;
+				if (scrollY < 0 || scrollY > layout.maxScroll + 1) return;
+				nativeMode = false;
+				setClass("scroll-native", false);
+				springs.glassMix.to = 1;
+				setScrolling(false);
+			}
+
 			// Runs before each sim frame (mq_before_frame). Returning false
 			// skips the sim's frame: no physics, no GL calls, last image stays.
 			function beforeFrame() {
@@ -839,8 +890,13 @@ const structuredData = {
 					scrollY = sy;
 					onScrollMoved();
 				}
-				const isScrolling = now - lastScrollEvent < SCROLL_SETTLE_MS;
-				if (isScrolling !== scrolling) setScrolling(isScrolling);
+				if (touchScroll) {
+					settleNative(now);
+					springs.shelfReveal.to = viewTimeline || !shelf.classList.contains("io-reveal") || shelf.classList.contains("in-view") ? 1 : 0;
+				} else {
+					const isScrolling = now - lastScrollEvent < SCROLL_SETTLE_MS;
+					if (isScrolling !== scrolling) setScrolling(isScrolling);
+				}
 
 				const p = ex.is_paused() !== 0;
 				if (p !== paused) setPaused(p);
@@ -858,6 +914,9 @@ const structuredData = {
 				let render = true;
 				if (pendingFrames > 0) pendingFrames--;
 				else if (paused) render = pointerDown;
+				// Touch scrolling: the renderer draws nothing that moves with the
+				// page, so planets at half rate leave the GPU to the scroll.
+				else if (touchScroll && nativeMode) render = frameNo % 2 === 0;
 				// Hero scrolled away and nothing touched: half rate is plenty for
 				// planets drifting behind the shelf.
 				else if (!scrolling && !pointerDown && heroFade() === 0) render = frameNo % 2 === 0;
@@ -1020,6 +1079,7 @@ const structuredData = {
 				"scroll",
 				() => {
 					lastScrollEvent = performance.now();
+					enterNative();
 					if (!live) {
 						scrollY = window.scrollY;
 						onScrollMoved();
@@ -1050,6 +1110,32 @@ const structuredData = {
 				true,
 			);
 
+			// Touch: hand the shelf and headline to native scrolling before the
+			// page moves, and keep them there until fingers lift and it settles.
+			if (touchScroll) {
+				window.addEventListener(
+					"touchstart",
+					(e) => {
+						touchActive = e.touches.length > 0;
+						if (!(paused && e.target === canvas)) enterNative();
+					},
+					{ capture: true, passive: true },
+				);
+				for (const type of ["touchend", "touchcancel"]) {
+					window.addEventListener(
+						type,
+						(e) => {
+							touchActive = e.touches.length > 0;
+							lastScrollEvent = Math.max(lastScrollEvent, performance.now());
+						},
+						{ capture: true, passive: true },
+					);
+				}
+			}
+
+			// The canvas only takes input while the sim is paused (CSS), so
+			// macroquad's blocking touch and wheel listeners never stand between
+			// a swipe and the browser's scrolling.
 			// Touches that start on a body (or its handle) while paused go to
 			// the sim; anything else scrolls the page (touch-action: pan-y).
 			const simTouches = new Set();
@@ -1139,6 +1225,13 @@ const structuredData = {
 				/* Vertical swipes scroll the page. Touches that grab a planet are
 				   claimed by the sim (see the touch routing in the page script). */
 				touch-action: pan-y;
+				/* Input only while paused (dragging planets). Otherwise
+				   macroquad's non-passive touch and wheel listeners would make
+				   every swipe wait on the main thread before the page scrolls. */
+				pointer-events: none;
+			}
+			.paused #glcanvas {
+				pointer-events: auto;
 			}
 			.sim-ready #glcanvas {
 				opacity: 1;
@@ -1344,7 +1437,7 @@ const structuredData = {
 					background-color: rgba(255, 255, 255, 0.05);
 				}
 			}
-			html.sim-glass .shelf .reveal {
+			html.sim-glass:not(.touch-scroll) .shelf .reveal {
 				opacity: 1;
 				transform: none;
 				animation: none;
@@ -1361,20 +1454,49 @@ const structuredData = {
 			   same frame as their glass, so the glass never has to hand off to a
 			   frosted CSS copy and their content never leaves it. The ::before
 			   keeps the shelf's place in the page. */
-			html.sim-glass:not(.measuring) .shelf::before {
+			html.sim-glass:not(.measuring):not(.touch-scroll) .shelf::before {
 				content: "";
 				display: block;
 				height: var(--shelf-content-h, 0px);
 			}
-			html.sim-glass:not(.measuring) .shelf-content {
+			html.sim-glass:not(.measuring):not(.touch-scroll) .shelf-content {
 				position: fixed;
 				top: 0;
 				left: 0;
 				right: 0;
 			}
-			html.sim-glass:not(.measuring) .scroll-hint {
+			html.sim-glass:not(.measuring):not(.touch-scroll) .scroll-hint {
 				position: fixed;
 				top: 0;
+			}
+
+			/* Touch devices: the shelf and pill stay in the page and scroll
+			   natively (the display's full rate). While the page moves they wear
+			   CSS glass; once it rests, the renderer's glass fades back in under
+			   them and this fades out. */
+			html.sim-glass.touch-scroll .project-card::before,
+			html.sim-glass.touch-scroll .scroll-hint::before {
+				content: "";
+				position: absolute;
+				inset: 0;
+				z-index: -1;
+				border-radius: inherit;
+				background-color: var(--lg-glass-fill);
+				box-shadow: var(--lg-hairline);
+				-webkit-backdrop-filter: blur(20px) saturate(160%);
+				backdrop-filter: blur(20px) saturate(160%);
+				opacity: 0;
+				transition: opacity 0.3s ease;
+				pointer-events: none;
+			}
+			html.sim-glass.touch-scroll .scroll-hint::before {
+				-webkit-backdrop-filter: blur(6px) saturate(180%);
+				backdrop-filter: blur(6px) saturate(180%);
+			}
+			html.sim-glass.touch-scroll.scroll-native .project-card::before,
+			html.sim-glass.touch-scroll.scroll-native .scroll-hint::before {
+				opacity: 1;
+				transition: none;
 			}
 			.measuring .shelf-content {
 				transform: none !important;
