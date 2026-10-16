@@ -425,7 +425,8 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		const wireEls = [...root.querySelectorAll<HTMLElement>("[data-wire]")];
 
 		const reduceMQ = window.matchMedia("(prefers-reduced-motion: reduce)");
-		const desktopMQ = window.matchMedia("(min-width: 760px)");
+		// The 1200px stage needs ~1024px: narrower, its 13px text scales below 11px.
+		const desktopMQ = window.matchMedia("(min-width: 1024px)");
 		let index = 0;
 		let autoplay = !reduceMQ.matches;
 		let inView = false;
@@ -1105,7 +1106,7 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		}
 	}
 
-	@media (max-width: 759px) {
+	@media (max-width: 1023px) {
 		.hiw {
 			align-items: stretch;
 			text-align: left;
@@ -1123,6 +1124,15 @@ const isActive = (id: NodeId) => first.active.includes(id);
 		}
 		.hiw-diagram {
 			margin-top: 16px;
+		}
+	}
+	/* Tablets: the stacked diagram in a centered column. */
+	@media (min-width: 700px) and (max-width: 1023px) {
+		.hiw {
+			width: 100%;
+			max-width: 600px;
+			margin-left: auto;
+			margin-right: auto;
 		}
 	}
 
@@ -1187,7 +1197,7 @@ const isActive = (id: NodeId) => first.active.includes(id);
 	}
 	/* Phones: one row, a segmented control. Track r22 with a 4px inset, so
 	   segments are 36px tall and r18; 8px between segments. */
-	@media (max-width: 759px) {
+	@media (max-width: 1023px) {
 		.hiw-chips {
 			flex-wrap: nowrap;
 			gap: 8px;
