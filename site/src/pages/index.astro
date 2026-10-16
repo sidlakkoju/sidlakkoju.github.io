@@ -130,18 +130,20 @@ const structuredData = {
 
 		<!-- The sim stays fixed behind everything; only this content scrolls. -->
 		<section id="projects" class="shelf" aria-labelledby="projects-title">
-			<h2 id="projects-title" class="lg-eyebrow reveal" style="--i: 0">Projects</h2>
-			<ul class="shelf-grid" role="list">
-				{projects.map((p, i) => (
-					<li class="reveal" style={`--i: ${i + 1}`}>
-						<ProjectCard href={p.href} title={p.title} tagline={p.tagline} icon={p.icon} transitionName={`project-${p.slug}`} />
+			<div class="shelf-content">
+				<h2 id="projects-title" class="lg-eyebrow reveal" style="--i: 0">Projects</h2>
+				<ul class="shelf-grid" role="list">
+					{projects.map((p, i) => (
+						<li class="reveal" style={`--i: ${i + 1}`}>
+							<ProjectCard href={p.href} title={p.title} tagline={p.tagline} icon={p.icon} transitionName={`project-${p.slug}`} />
+						</li>
+					))}
+					<!-- Keeps one project from looking lonely. Remove once there are two. -->
+					<li class="reveal" style={`--i: ${projects.length + 1}`} aria-hidden="true">
+						<div class="more-soon">More soon</div>
 					</li>
-				))}
-				<!-- Keeps one project from looking lonely. Remove once there are two. -->
-				<li class="reveal" style={`--i: ${projects.length + 1}`} aria-hidden="true">
-					<div class="more-soon">More soon</div>
-				</li>
-			</ul>
+				</ul>
+			</div>
 		</section>
 
 		<!-- Glass UI. Elements marked .glass are drawn by the renderer as
@@ -302,6 +304,7 @@ const structuredData = {
 			const bodyControls = document.getElementById("body-controls");
 			const template = document.getElementById("body-ctl-template");
 			const shelf = document.getElementById("projects");
+			const shelfContent = shelf.querySelector(".shelf-content");
 			const hint = document.querySelector(".scroll-hint");
 			const revealEls = [...shelf.querySelectorAll(".reveal")];
 			const cardEls = [...shelf.querySelectorAll(".project-card")];
@@ -332,8 +335,12 @@ const structuredData = {
 			//
 			// Anything the canvas draws lags native scrolling by a frame or more
 			// (iOS momentum scrolling especially), so while the page is
-			// actively scrolling the HTML headline and the CSS glass stand in
-			// for the canvas copies, and hand back once scrolling settles.
+			// actively scrolling the HTML headline stands in for the canvas
+			// copy, and hands back once scrolling settles. The shelf and the
+			// scroll pill go the other way: they're fixed, and moved here in
+			// the same frame as their glass (see applyShelf), so the glass
+			// stays liquid while scrolling and their content stays on it, even
+			// through a rubber-band bounce.
 			let scrollY = window.scrollY;
 			let viewportH = window.innerHeight;
 			let lastScrollEvent = -Infinity;
@@ -360,7 +367,6 @@ const structuredData = {
 				pressAdd: spring(),
 				pressHint: spring(),
 				hint: spring(hintWanted() ? 1 : 0),
-				shelfGlass: spring(1), // WebGL glass on the shelf (0 while scrolling)
 				icons: iconLinks.map(() => spring()),
 				cardHover: cardEls.map(() => spring()),
 				cardPress: cardEls.map(() => spring()),
@@ -427,18 +433,21 @@ const structuredData = {
 					// view; the page drives that so the glass can follow it exactly.
 					reveal: revealEls.map((el) => ({ el, i: parseFloat(el.style.getPropertyValue("--i")) || 0, ...docRect(el), p: -1 })),
 					hint: docRect(hint),
+					shelfY: docRect(shelfContent).y,
 				};
+				const shelfH = shelfContent.offsetHeight;
 				layout.cards = cardEls.map((el) => ({
 					...docRect(el),
 					radius: parseFloat(getComputedStyle(el).borderTopLeftRadius),
 					reveal: layout.reveal.find((r) => r.el.contains(el)),
 				}));
 				root.classList.remove("measuring");
+				setStyle(shelf, "--shelf-content-h", `${shelfH}px`);
 				// While the card is up, lift the headline just enough to clear it,
 				// but never under the top buttons.
 				const needed = layout.card.y - 20 - (layout.nav.y - sy + layout.nav.h);
 				layout.lift = Math.max(Math.min(0, needed), -(layout.heading.y - sy - 80));
-				for (const el of [infoCard, main, hint, ...revealEls, ...cardEls]) el._styles = null;
+				for (const el of [infoCard, main, hint, shelfContent, ...revealEls, ...cardEls]) el._styles = null;
 				dirty = true;
 			}
 
@@ -728,12 +737,13 @@ const structuredData = {
 					const h = clamp01(springs.hint.x);
 					const bob = h > 0.002 ? (-5 * (1 - Math.cos((2 * Math.PI * now) / 2600))) / 2 : 0;
 					const hintScale = 1 - 0.06 * springs.pressHint.x;
+					const r = L.hint;
 					setStyle(hint, "opacity", String(h));
 					setStyle(hint, "visibility", h > 0.002 ? "visible" : "hidden");
-					setStyle(hint, "translate", `0 ${bob.toFixed(2)}px`);
+					// Fixed: placed in the viewport, in step with its glass.
+					setStyle(hint, "translate", `0 ${(r.y + bob - scrollY).toFixed(2)}px`);
 					setStyle(hint, "scale", hintScale === 1 ? "" : hintScale.toFixed(4));
-					const r = L.hint;
-					pushShape(r.x, r.y + bob - scrollY, r.w, r.h, r.h / 2, hintScale, h * springs.shelfGlass.x, 0);
+					pushShape(r.x, r.y + bob - scrollY, r.w, r.h, r.h / 2, hintScale, h, 0);
 				}
 				flushShapes(ex);
 			}
@@ -741,8 +751,11 @@ const structuredData = {
 			// The shelf: reveal progress follows the CSS view() timeline it
 			// replaces (`entry i*4%` to `cover 30% + i*4%`, linear), and each
 			// project card is frosted glass that moves, fades, and scales with it.
+			// The shelf itself is fixed and placed here from the same scroll
+			// position as the glass, so the two never drift apart.
 			function applyShelf(now) {
 				const vh = viewportH;
+				setStyle(shelfContent, "transform", `translate3d(0, ${layout.shelfY - scrollY}px, 0)`);
 				for (const r of layout.reveal) {
 					const d = vh - (r.y - scrollY);
 					const start = r.i * 0.04 * r.h;
@@ -753,7 +766,6 @@ const structuredData = {
 					setStyle(r.el, "opacity", p === 1 ? "" : String(p));
 					setStyle(r.el, "transform", p === 1 ? "" : `translateY(${48 * (1 - p)}px)`);
 				}
-				const glass = springs.shelfGlass.x;
 				layout.cards.forEach((c, i) => {
 					const hover = springs.cardHover[i].x;
 					const scale = 1 - 0.02 * springs.cardPress[i].x;
@@ -761,7 +773,7 @@ const structuredData = {
 					setStyle(cardEls[i], "transform", hover === 0 && scale === 1 ? "" : `translateY(${lift}px) scale(${scale})`);
 					const p = c.reveal ? c.reveal.p : 1;
 					const y = c.y - scrollY + (c.reveal ? 48 * (1 - p) : 0) + lift;
-					pushShape(c.x, y, c.w, c.h, c.radius, scale, p * glass, 1);
+					pushShape(c.x, y, c.w, c.h, c.radius, scale, p, 1);
 				});
 			}
 
@@ -808,10 +820,6 @@ const structuredData = {
 
 			function setScrolling(on) {
 				scrolling = on;
-				setClass("scrolling", on);
-				const g = springs.shelfGlass;
-				if (on) g.x = g.to = g.v = 0;
-				else g.to = 1;
 				dirty = true;
 			}
 
@@ -904,8 +912,10 @@ const structuredData = {
 				// then on it also draws the shelf's glass.
 				requestAnimationFrame(() =>
 					requestAnimationFrame(() => {
-						root.classList.add("sim-ready", "sim-glass");
+						// Place the shelf and pill before they turn fixed.
 						glassOn = true;
+						applyAnimations(window.wasm_exports, performance.now());
+						root.classList.add("sim-ready", "sim-glass");
 						dirty = true;
 					}),
 				);
@@ -936,6 +946,15 @@ const structuredData = {
 				a.addEventListener("pointerenter", (e) => e.pointerType === "mouse" && (springs.icons[i].to = 1));
 				a.addEventListener("pointerleave", () => (springs.icons[i].to = 0));
 			});
+			// A focused card is fixed, so the browser won't scroll to it: bring
+			// it on screen the way focus would.
+			shelf.addEventListener("focusin", (e) => {
+				const i = cardEls.indexOf(e.target.closest(".project-card"));
+				if (!glassOn || i < 0) return;
+				const c = layout.cards[i];
+				if (c.y - scrollY < 0 || c.y + c.h - scrollY > viewportH) window.scrollTo(0, c.y + c.h / 2 - viewportH / 2);
+			});
+
 			// Project cards: hover lifts, press squishes; the glass follows.
 			cardEls.forEach((el, i) => {
 				el.addEventListener("pointerenter", (e) => e.pointerType === "mouse" && (springs.cardHover[i].to = 1));
@@ -1335,32 +1354,30 @@ const structuredData = {
 				animation: none;
 				transition: none;
 			}
-			/* While scrolling, the renderer's glass would trail the cards, so the
-			   CSS glass stands in and the renderer's fades back in at rest. */
-			html.sim-glass [data-glass]::before {
+			/* The renderer's glass is drawn from the scroll position the page
+			   script reads each frame, which trails native scrolling (iOS momentum
+			   and rubber-banding most of all). So the shelf and the pill don't
+			   scroll natively: they're fixed, and the script moves them in the
+			   same frame as their glass, so the glass never has to hand off to a
+			   frosted CSS copy and their content never leaves it. The ::before
+			   keeps the shelf's place in the page. */
+			html.sim-glass:not(.measuring) .shelf::before {
 				content: "";
-				position: absolute;
-				z-index: -1;
-				inset: 0;
-				border-radius: inherit;
-				pointer-events: none;
-				background-color: var(--lg-glass-fill);
-				-webkit-backdrop-filter: blur(20px) saturate(160%);
-				backdrop-filter: blur(20px) saturate(160%);
-				box-shadow: var(--lg-hairline);
-				clip-path: none;
-				opacity: 0;
-				visibility: hidden;
-				transition: opacity 0.25s ease, visibility 0s 0.25s;
+				display: block;
+				height: var(--shelf-content-h, 0px);
 			}
-			html.sim-glass [data-glass="clear"]::before {
-				-webkit-backdrop-filter: blur(6px) saturate(180%);
-				backdrop-filter: blur(6px) saturate(180%);
+			html.sim-glass:not(.measuring) .shelf-content {
+				position: fixed;
+				top: 0;
+				left: 0;
+				right: 0;
 			}
-			html.sim-glass.scrolling [data-glass]::before {
-				opacity: 1;
-				visibility: visible;
-				transition: none;
+			html.sim-glass:not(.measuring) .scroll-hint {
+				position: fixed;
+				top: 0;
+			}
+			.measuring .shelf-content {
+				transform: none !important;
 			}
 
 			/* ---- Pause / add ---- */
@@ -1669,17 +1686,22 @@ const structuredData = {
 				position: relative;
 				z-index: 2;
 				box-sizing: border-box;
-				display: flex;
-				flex-direction: column;
-				align-items: center;
-				gap: 16px;
-				padding: 0 24px calc(50vh - var(--shelf-h) / 2);
-				padding: 0 max(24px, var(--lg-safe-right)) calc(50svh - var(--shelf-h) / 2) max(24px, var(--lg-safe-left));
+				padding-bottom: calc(50vh - var(--shelf-h) / 2);
+				padding-bottom: calc(50svh - var(--shelf-h) / 2);
 				/* Let drags on empty space reach the sim behind. */
 				pointer-events: none;
 				/* The cards' refraction layer (SVG fallback) reaches past them to
 				   sample light at the rim; keep that from widening the page. */
 				overflow-x: clip;
+			}
+			.shelf-content {
+				box-sizing: border-box;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: 16px;
+				padding: 0 24px;
+				padding: 0 max(24px, var(--lg-safe-right)) 0 max(24px, var(--lg-safe-left));
 			}
 			.shelf h2 {
 				margin: 0;
@@ -1728,7 +1750,7 @@ const structuredData = {
 			/* Phones: the same 20px gutters as the project page, so a card's
 			   tagline stays on one line (and its icon concentric) from 375px. */
 			@media (max-width: 699px) {
-				.shelf {
+				.shelf-content {
 					padding-left: max(20px, var(--lg-safe-left));
 					padding-right: max(20px, var(--lg-safe-right));
 				}
