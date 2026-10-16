@@ -2370,7 +2370,7 @@ $('remove').setAttribute('aria-label',inspected?'Back to review':'Mark for delet
 .content > header button{width:40px;height:40px;min-height:40px;padding:9px;color:var(--ps-label);background:var(--ps-glass-solid);box-shadow:inset 0 0 0 1px var(--ps-glass-stroke),0 0 0 .5px var(--ps-glass-edge),var(--ps-glass-shadow)}
 .content > header button svg{filter:drop-shadow(var(--ps-text-shadow))}
 .content>header:first-child{height:60px;padding:0 16px}
-.content .storage-counter{padding:7px 18px 8px;border-radius:var(--ps-r-pill);background:var(--ps-glass-solid);box-shadow:inset 0 0 0 1px var(--ps-glass-stroke),0 0 0 .5px var(--ps-glass-edge),var(--ps-glass-shadow);max-width:calc(100% - 152px)}
+.content .storage-counter{padding:7px 18px 8px;border-radius:var(--ps-r-pill);background:var(--ps-glass-solid);box-shadow:inset 0 0 0 1px var(--ps-glass-stroke),0 0 0 .5px var(--ps-glass-edge),var(--ps-glass-shadow);max-width:calc(100% - 152px)} .content>header:first-child:has(#close:not([hidden])) .storage-counter{max-width:calc(100% - 208px)}
 .sv-label{font:600 10px/12px var(--ps-font);letter-spacing:.14em}
 .sv-value{text-shadow:var(--ps-text-shadow)}
 .trash-badge{top:-5px;right:-5px;min-width:20px;height:20px;border-radius:10px;font:700 11px/20px var(--ps-font);box-shadow:0 2px 6px var(--ps-shadow-color)}
@@ -2465,7 +2465,7 @@ $('remove').setAttribute('aria-label',inspected?'Back to review':'Mark for delet
 .content:has(> #caption:not([hidden]))>#card:not(.expanded) #media,.content>#card #media{border-radius:var(--ps-r-card)}
 .content>header:first-child{height:52px;padding:0}
 .content > header button{width:48px;height:48px;min-height:48px;padding:12px}
-.content .storage-counter{min-width:180px;padding:5px 18px 6px}
+.content>header:first-child .storage-counter{position:relative;left:auto;top:auto;transform:none;flex:1 1 auto;min-width:0;max-width:none;padding:5px 18px 6px}
 .content>.order-row{grid-row:2;justify-self:start;margin:16px 0 0}
 .content>#pair-onboarding{grid-row:3;margin:16px 4px 0}
 .content>#caption,.content #caption{grid-row:4;align-self:start;justify-self:stretch;max-width:none;margin:16px 0 0;padding:16px 20px;border-radius:24px;text-align:left;font:500 15px/21px var(--ps-font)}
@@ -2486,7 +2486,31 @@ $('remove').setAttribute('aria-label',inspected?'Back to review':'Mark for delet
 .trash-done-demo{display:flex;flex-direction:column;align-items:center;gap:8px}.trash-done-demo p{margin:0;color:var(--ps-label2)}.trash-done-demo button{min-height:44px;padding:0 18px;border-radius:var(--ps-r-pill);background:var(--ps-glass-fill-strong);box-shadow:inset 0 0 0 1px var(--ps-glass-stroke)}.trash-done-demo[hidden]{display:none}
 @media (max-height:500px) and (orientation:landscape){.trash-nav{height:44px}.trash-size{margin-top:4px;padding:8px 16px 0;font:800 24px/30px var(--ps-font)}.trash-subtitle{padding:0 16px 8px;margin-bottom:8px}.content .trash-heading{padding-top:0;font:700 20px/26px var(--ps-font)}.trash-grid{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}.trash-bar{padding:6px;margin-bottom:calc(env(safe-area-inset-bottom) + 8px)}.trash-bar button{height:44px}}
 @media (prefers-reduced-transparency:reduce){.launcher,.content > header button,.content .storage-counter,.order-row>button,.content #caption,.content>#caption,.queue-pill,.content .actions,#pair-onboarding,#order-menu,.share-sheet,.settings-sheet,.review-panel,.trash-preview,.trash-done,.settings-sheet .settings-header,.trash-bar,.shortcuts{background:var(--ps-glass-solid);backdrop-filter:none;-webkit-backdrop-filter:none}.launcher{background:var(--ps-accent)}.ambient::after{background:var(--ps-glass-scrim)}.memory-label,.card-tool,#enlarge{background:var(--ps-glass-solid);color:var(--ps-label);text-shadow:none}}
-@media (prefers-reduced-motion:reduce){.ambient canvas{transition:none}}`;root.append(glassStyle);
+@media (prefers-reduced-motion:reduce){.ambient canvas{transition:none}}
+.settings-sheet .group{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px;border-radius:34px}
+.settings-sheet .group>:not(button){flex:1 0 100%;margin-left:0;margin-right:0}
+.settings-sheet .group>h2{margin:2px 4px}
+.settings-sheet .group>p,.settings-sheet .group>details,.settings-sheet .group>label{padding-left:4px;padding-right:4px;box-sizing:border-box}
+.settings-sheet .group>label{justify-content:flex-start}
+@media (min-width:601px) and (min-height:521px){
+.content{border-radius:36px}
+.content>header:first-child{height:56px}
+.settings-sheet,.review-panel{border-radius:36px}
+.settings-sheet .settings-header{height:auto;min-height:0;padding:14px 14px 14px 22px;border-top-left-radius:inherit;border-top-right-radius:inherit}
+.settings-sheet .settings-header button{height:44px;min-height:44px;padding:0 18px;border-radius:22px}
+.trash-nav{height:auto;padding:14px}
+.trash-nav button{height:44px;min-height:44px;border-radius:22px}
+.review-panel>.trash-bar{align-self:center;width:min(560px,calc(100% - 96px));margin-left:0;margin-right:0}}
+@media (min-width:900px) and (min-height:700px){
+.content{border-radius:0}
+.content>header:first-child{height:52px}
+.content>#card,.content:has(> #caption:not([hidden]))>#card:not(.expanded),.content:has(> #caption:not([hidden]))>#card:not(.expanded) #media,.content>#card #media{border-radius:36px}
+.memory-label{top:19px;left:19px}
+.card-tool,#enlarge{right:12px}
+#enlarge{top:12px}#open-photos{top:72px}#share{top:132px}
+.content .actions{padding:12px}
+.shortcuts{padding:16px}}
+`;root.append(glassStyle);
  const ambient=document.createElement('div');ambient.setAttribute('class','ambient');ambient.setAttribute('aria-hidden','true');const ambientLayers=[0,1].map(()=>{const canvas=document.createElement('canvas');canvas.width=48;canvas.height=48;ambient.append(canvas);return canvas;});overlayElement.append(ambient);
  let demoSeeding=null,ambientKey=null,ambientLayer=0,ambientImage=null;
  function paintAmbient(image){const next=ambientLayers[1-ambientLayer],context=next.getContext('2d'),small=document.createElement('canvas');small.width=10;small.height=10;const reduced=small.getContext('2d');reduced.imageSmoothingEnabled=true;reduced.imageSmoothingQuality='high';reduced.drawImage(image,0,0,10,10);context.imageSmoothingEnabled=true;context.imageSmoothingQuality='high';context.clearRect(0,0,48,48);if('filter' in context)context.filter='blur(3px)';context.drawImage(small,-8,-8,64,64);ambientLayer=1-ambientLayer;next.classList.add('on');ambientLayers[1-ambientLayer].classList.remove('on');}
@@ -2622,5 +2646,5 @@ $('remove').setAttribute('aria-label',inspected?'Back to review':'Mark for delet
 const params=new URLSearchParams(location.search);
 const embed=params.get('embed')==='1';
 if(embed)document.documentElement.dataset.embed='1';
-mountPhotosSwipe(createDemoEnvironment({window,document,location,base:new URL('media/',document.baseURI).href,embed,version:"1.2.162"}));
+mountPhotosSwipe(createDemoEnvironment({window,document,location,base:new URL('media/',document.baseURI).href,embed,version:"1.2.163"}));
 })();
