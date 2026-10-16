@@ -15,3 +15,6 @@ site/.astro/
 # it on deploy; local builds can too. If you'd rather not commit it,
 # uncomment the next line and always rely on CI.
 # site/public/sim/gravity_simulation.wasm
+
+# perf-check.mjs results
+site/perf-*.json
