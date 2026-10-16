@@ -149,6 +149,7 @@ const structuredData = {
 		<!-- Glass UI. Elements marked .glass are drawn by the renderer as
 		     refractive glass at their on-screen rect; the HTML only provides the
 		     content, layout, and hit areas. -->
+		<div class="safe-probe" aria-hidden="true"></div>
 		<div class="sim-ui">
 			<div class="sim-buttons">
 				<button id="add-btn" class="glass glass-btn" aria-label="Add planet" tabindex="-1">
@@ -417,14 +418,19 @@ const structuredData = {
 
 			// ---- Layout ---------------------------------------------------------
 
+			// Relative to the canvas, which is what the renderer draws in. Set
+			// by measure() before any rect is taken.
+			let canvasOrigin = { x: 0, y: 0 };
 			function rectOf(el) {
 				const r = el.getBoundingClientRect();
-				return { x: r.left, y: r.top, w: r.width, h: r.height };
+				return { x: r.left - canvasOrigin.x, y: r.top - canvasOrigin.y, w: r.width, h: r.height };
 			}
 
 			// Measure everything at rest (transforms off) in one forced layout.
 			function measure() {
 				root.classList.add("measuring");
+				const c = canvas.getBoundingClientRect();
+				canvasOrigin = { x: c.left, y: c.top };
 				// Content that scrolls with the page is kept in document
 				// coordinates; the fixed controls stay in viewport ones.
 				const sy = window.scrollY;
@@ -872,7 +878,28 @@ const structuredData = {
 				setClass("scroll-native", false);
 				springs.glassMix.to = 1;
 				setScrolling(false);
+				// Safari's toolbars come and go while the page scrolls, and with
+				// them the safe area the fixed buttons sit against.
+				scheduleMeasure();
 			}
+
+			// Re-measure once (not per frame) when the fixed controls may have
+			// moved without a window resize: the safe-area insets change as iOS
+			// Safari's toolbars collapse and expand, and pinch zoom moves the
+			// visual viewport. Their drawn glass would otherwise stay behind.
+			let measureQueued = false;
+			function scheduleMeasure() {
+				if (measureQueued || !layout) return;
+				measureQueued = true;
+				requestAnimationFrame(() => {
+					measureQueued = false;
+					measure();
+					redraw(2);
+				});
+			}
+			const safeProbe = document.querySelector(".safe-probe");
+			if (safeProbe && "ResizeObserver" in window) new ResizeObserver(scheduleMeasure).observe(safeProbe);
+			window.visualViewport?.addEventListener("resize", scheduleMeasure, { passive: true });
 
 			// Runs before each sim frame (mq_before_frame). Returning false
 			// skips the sim's frame: no physics, no GL calls, last image stays.
@@ -1500,6 +1527,19 @@ const structuredData = {
 			}
 			.measuring .shelf-content {
 				transform: none !important;
+			}
+
+			/* Sized by the safe-area insets so the page script can watch them
+			   change (they do, without a resize, as iOS Safari's toolbars
+			   collapse and expand) and keep the drawn glass under the buttons. */
+			.safe-probe {
+				position: fixed;
+				top: 0;
+				left: 0;
+				width: max(1px, var(--safe-left), var(--safe-right));
+				height: max(1px, var(--safe-top));
+				visibility: hidden;
+				pointer-events: none;
 			}
 
 			/* ---- Pause / add ---- */

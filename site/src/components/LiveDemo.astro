@@ -14,6 +14,12 @@
 //     Builds that predate the param ignore it.
 //   - demo -> page: postMessage({ type: "photos-swipe-demo", event: "first-swipe" })
 //     hides the "Drag the photo" coach mark.
+//   - demo -> page: postMessage({ type: "photos-swipe-demo", event: "escape" })
+//     when Escape is pressed inside the demo with nothing of its own open;
+//     the phone sheet closes on it (the iframe has focus once tapped, so the
+//     <dialog> never sees the key itself). Builds before 1.2.169 don't send it.
+//   - Wheel over the inline demo: the demo locks its own document, so the
+//     page scrolls itself by any wheel the demo didn't use (see forwardWheel).
 //   - page -> demo: postMessage({ type: "photos-swipe-demo", command: "reset" })
 //     is sent when "Reset" is clicked. The demo reloads itself, so the page
 //     fades the frame out, shows the coach mark again, and fades the frame
@@ -135,13 +141,47 @@ import { links } from "../data/photos-swipe";
 			return f;
 		}
 
+		// The demo locks its own document, so a wheel over the inline frame
+		// never chains to the page. Scroll the page by any vertical wheel the
+		// demo didn't use: it only takes the wheel while a photo is enlarged
+		// or a panel inside it can still scroll that way.
+		function forwardWheel(frame: HTMLIFrameElement) {
+			const w = frame.contentWindow as (Window & typeof globalThis) | null;
+			if (!w) return;
+			w.addEventListener(
+				"wheel",
+				(e: WheelEvent) => {
+					if (e.ctrlKey) return;
+					const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1;
+					const dy = e.deltaY * unit;
+					if (Math.abs(dy) <= Math.abs(e.deltaX * unit)) return;
+					for (const node of e.composedPath()) {
+						if (!(node instanceof w.HTMLElement) || node.scrollHeight <= node.clientHeight + 1) continue;
+						const overflow = w.getComputedStyle(node).overflowY;
+						if (overflow !== "auto" && overflow !== "scroll") continue;
+						if (dy < 0 ? node.scrollTop > 0 : node.scrollTop + node.clientHeight < node.scrollHeight - 1) return;
+					}
+					// The demo stops the wheel from bubbling, so this listens in the
+					// capture phase and decides once the event has been dispatched.
+					setTimeout(() => {
+						if (!e.defaultPrevented) window.scrollBy(0, dy);
+					});
+				},
+				{ capture: true, passive: true },
+			);
+		}
+		
 		// Inline demo: only on desktop, and only once the frame is near view.
 		function syncInline() {
 			const want = near && pageReady && !sheetMQ.matches;
 			root.classList.toggle("is-inline", !sheetMQ.matches);
 			if (want && !inline) {
 				inline = makeFrame(`${src}?embed=1&top=${STATUS_TOP}&scheme=dark`, "Photos Swipe live demo");
-				inline.addEventListener("load", () => root.classList.add("is-loaded"));
+				const frame = inline;
+				frame.addEventListener("load", () => {
+					root.classList.add("is-loaded");
+					forwardWheel(frame);
+				});
 				host.append(inline);
 			} else if (!want && inline && sheetMQ.matches) {
 				inline.remove();
@@ -178,9 +218,11 @@ import { links } from "../data/photos-swipe";
 		else window.addEventListener("load", ready, { once: true });
 
 		window.addEventListener("message", (e) => {
-			if (e.origin !== location.origin || !inline || e.source !== inline.contentWindow) return;
 			const data = e.data;
-			if (data && data.type === MESSAGE_TYPE && data.event === "first-swipe") coach.classList.add("is-hidden");
+			if (e.origin !== location.origin || !data || data.type !== MESSAGE_TYPE) return;
+			if (inline && e.source === inline.contentWindow && data.event === "first-swipe") coach.classList.add("is-hidden");
+			const sheetFrame = sheetHost.querySelector("iframe");
+			if (sheet.open && sheetFrame && e.source === sheetFrame.contentWindow && data.event === "escape") sheet.close();
 		});
 
 		root.querySelector("[data-reset]")!.addEventListener("click", () => {
