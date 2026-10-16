@@ -3,10 +3,14 @@
 //
 // Contract with the demo at /photos-swipe/demo/ (same origin):
 //   - Desktop (>= 700px wide and not touch-first): an inline
-//     <iframe src="/photos-swipe/demo/?embed=1"> rendered at 390x794 (the
-//     844pt screen minus a 50pt status bar that holds the Dynamic Island)
-//     and scaled into the phone frame. It is created only when the frame is near
-//     the viewport.
+//     <iframe src="/photos-swipe/demo/?embed=1&top=50"> rendered edge to edge
+//     at 390x844 and scaled into the phone frame. It is created only when the
+//     frame is near the viewport, and its rendering is skipped
+//     (content-visibility) while it's far offscreen; its state is kept.
+//   - top=<pt>: the height of the status bar the page draws over the top of
+//     the iframe (time, Dynamic Island, glyphs; transparent, no touches). The
+//     demo pads its own header by this much so it stays clear of the island.
+//     Builds that predate the param ignore it.
 //   - demo -> page: postMessage({ type: "photos-swipe-demo", event: "first-swipe" })
 //     hides the "Drag the photo" coach mark.
 //   - page -> demo: postMessage({ type: "photos-swipe-demo", command: "reset" })
@@ -92,6 +96,8 @@ import { links } from "../data/photos-swipe";
 
 <script>
 	const MESSAGE_TYPE = "photos-swipe-demo";
+	// Status bar height in 390pt screen units; matches .phone-status.
+	const STATUS_TOP = 50;
 	const SHEET_MQ = "(max-width: 699px), (hover: none) and (pointer: coarse)";
 
 	for (const root of document.querySelectorAll<HTMLElement>("[data-demo]")) {
@@ -118,7 +124,7 @@ import { links } from "../data/photos-swipe";
 			const want = near && !sheetMQ.matches;
 			root.classList.toggle("is-inline", !sheetMQ.matches);
 			if (want && !inline) {
-				inline = makeFrame(`${src}?embed=1`, "Photos Swipe live demo");
+				inline = makeFrame(`${src}?embed=1&top=${STATUS_TOP}`, "Photos Swipe live demo");
 				inline.addEventListener("load", () => root.classList.add("is-loaded"), { once: true });
 				host.append(inline);
 			} else if (!want && inline && sheetMQ.matches) {
@@ -130,7 +136,12 @@ import { links } from "../data/photos-swipe";
 
 		new IntersectionObserver(
 			(entries) => {
-				if (entries[0].isIntersecting) {
+				const isNear = entries[0].isIntersecting;
+				// Far offscreen: skip the demo's rendering (rAF, paint) but keep
+				// its state. Safari already throttles offscreen iframes; Chrome
+				// doesn't for same-origin ones, but honours content-visibility.
+				root.classList.toggle("is-parked", !isNear);
+				if (isNear) {
 					near = true;
 					syncInline();
 				}
@@ -150,15 +161,20 @@ import { links } from "../data/photos-swipe";
 			inline?.contentWindow?.postMessage({ type: MESSAGE_TYPE, command: "reset" }, location.origin);
 		});
 
-		// Full-screen sheet for phones.
+		// Full-screen sheet for phones. Once it has slid up it covers the
+		// page completely, so the page stops painting underneath it.
+		const html = document.documentElement;
+		const cover = () => sheet.open && html.classList.add("sheet-covered");
+		sheet.addEventListener("animationend", (e) => e.target === sheet && cover());
 		root.querySelector("[data-open-sheet]")!.addEventListener("click", () => {
 			if (!sheetHost.firstChild) sheetHost.append(makeFrame(src, "Photos Swipe live demo"));
 			sheet.showModal();
-			document.documentElement.classList.add("sheet-open");
+			html.classList.add("sheet-open");
+			if (!sheet.getAnimations().length) cover();
 		});
 		root.querySelector("[data-close-sheet]")!.addEventListener("click", () => sheet.close());
 		sheet.addEventListener("close", () => {
-			document.documentElement.classList.remove("sheet-open");
+			html.classList.remove("sheet-open", "sheet-covered");
 			// Drop the demo so it starts fresh (and stops running) next time.
 			sheetHost.replaceChildren();
 		});
@@ -219,14 +235,15 @@ import { links } from "../data/photos-swipe";
 		/* Contain the iframe's own compositing so the rounded clip holds. */
 		isolation: isolate;
 	}
-	/* Status bar: 390x50pt, scaled like the iframe. The app starts below it,
-	   so the island never covers the app's top bar. */
+	/* Status bar: 390x50pt, scaled like the iframe, drawn over the top of the
+	   edge-to-edge screen. Transparent and click-through; the demo keeps its
+	   header clear of it via ?top=50. */
 	.phone-status {
 		--status-h: 50px;
 		position: absolute;
 		top: 0;
 		left: 0;
-		z-index: 1;
+		z-index: 2;
 		display: grid;
 		grid-template-columns: 1fr 110px 1fr;
 		align-items: center;
@@ -235,7 +252,6 @@ import { links } from "../data/photos-swipe";
 		width: 390px;
 		height: var(--status-h);
 		padding: 0 14px 0 20px;
-		background: #000;
 		color: #fff;
 		transform: scale(var(--phone-scale));
 		transform-origin: 0 0;
@@ -245,6 +261,7 @@ import { links } from "../data/photos-swipe";
 		font: 600 17px/22px var(--lg-font-text);
 		letter-spacing: -0.4px;
 		font-variant-numeric: tabular-nums;
+		text-shadow: 0 0 3px rgba(0, 0, 0, 0.3);
 	}
 	.phone-island {
 		width: 110px;
@@ -260,30 +277,32 @@ import { links } from "../data/photos-swipe";
 	}
 	.phone-glyphs svg {
 		display: block;
+		filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.3));
 	}
+	/* A full 390x844 capture with its status bar left empty for the overlay. */
 	.phone-preview {
 		position: absolute;
-		top: calc(50px * var(--phone-scale));
-		left: 0;
+		inset: 0;
 		width: 100%;
-		height: calc(100% - 50px * var(--phone-scale));
-		/* The preview is a full 390x844 capture; drop its own status bar. */
+		height: 100%;
 		object-fit: cover;
-		object-position: bottom;
 	}
 	.phone-iframe-host {
 		position: absolute;
-		top: calc(50px * var(--phone-scale));
+		top: 0;
 		left: 0;
 		width: 390px;
-		height: 794px;
+		height: 844px;
 		transform: scale(var(--phone-scale));
 		transform-origin: 0 0;
+	}
+	.is-parked .phone-iframe-host {
+		content-visibility: hidden;
 	}
 	.phone-iframe-host :global(iframe) {
 		display: block;
 		width: 390px;
-		height: 794px;
+		height: 844px;
 		border: 0;
 		background: transparent;
 		opacity: 0;
@@ -445,5 +464,11 @@ import { links } from "../data/photos-swipe";
 	}
 	:global(html.sheet-open) {
 		overflow: hidden;
+	}
+	:global(html.sheet-covered body) {
+		visibility: hidden;
+	}
+	.demo-sheet {
+		visibility: visible;
 	}
 </style>

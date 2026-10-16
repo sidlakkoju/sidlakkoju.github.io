@@ -17,12 +17,6 @@ export const intro = {
 	caption: "Free userscript · desktop browsers and iPhone Safari",
 };
 
-export const installSteps = [
-	{ title: "Get a userscript manager", text: "Tampermonkey on desktop, Userscripts on iPhone." },
-	{ title: "Install Photos Swipe", text: "One click. It keeps itself updated." },
-	{ title: "Open Google Photos", text: "Tap Photos Swipe at the bottom right." },
-];
-
 // ---------------------------------------------------------------------------
 // Install modal
 // ---------------------------------------------------------------------------
@@ -132,7 +126,9 @@ export const installGuide = {
 // How it works diagram
 // ---------------------------------------------------------------------------
 // Desktop geometry is a 1200x600 stage (Figma component 15:996). On narrow
-// screens the same nodes stack vertically.
+// screens the same nodes stack vertically as one-line rows: `subShort`,
+// `chipShort` and `captionShort` are the phone versions of `sub`, `chip` and
+// `caption`, and must make the same claims.
 
 export type NodeId = "userscript" | "storage" | "api" | "media" | "trash" | "worker";
 export type RouteId = "toApi" | "toMedia" | "toTrash" | "toWorker" | "toStorage";
@@ -149,13 +145,38 @@ export const diagram = {
 		"The script checks the Worker for updates on each Google Photos page load; no account data is sent. Optional sync uses Sign in with Google for identity only. No analytics.",
 
 	nodes: {
-		userscript: { title: "Photos Swipe userscript", sub: "UI in a shadow DOM over the page", glyph: "app" },
-		storage: { title: "Decisions & progress", sub: "IndexedDB · on this device", glyph: "hard-drive" },
-		api: { title: "Google Photos web API", sub: "batchexecute · the calls photos.google.com makes", glyph: "braces" },
-		media: { title: "Google media servers", sub: "googleusercontent.com · previews & video", glyph: "download" },
-		trash: { title: "Google Photos Trash", sub: "Restorable for 60 days", glyph: "trash" },
-		worker: { title: "Photos Swipe Worker", sub: "Cloudflare · app updates + optional sync", glyph: "sync" },
-	} satisfies Record<NodeId, { title: string; sub: string; glyph: string }>,
+		userscript: {
+			title: "Photos Swipe userscript",
+			sub: "UI in a shadow DOM over the page",
+			subShort: "UI in a shadow DOM over the page",
+			glyph: "app",
+		},
+		storage: {
+			title: "Decisions & progress",
+			sub: "IndexedDB · on this device",
+			subShort: "IndexedDB · on this device",
+			glyph: "hard-drive",
+		},
+		api: {
+			title: "Google Photos web API",
+			sub: "batchexecute · the calls photos.google.com makes",
+			subShort: "Same API as photos.google.com",
+			glyph: "braces",
+		},
+		media: {
+			title: "Google media servers",
+			sub: "googleusercontent.com · previews & video",
+			subShort: "Previews & video",
+			glyph: "download",
+		},
+		trash: { title: "Google Photos Trash", sub: "Restorable for 60 days", subShort: "Restorable for 60 days", glyph: "trash" },
+		worker: {
+			title: "Photos Swipe Worker",
+			sub: "Cloudflare · app updates + optional sync",
+			subShort: "Cloudflare · updates + optional sync",
+			glyph: "sync",
+		},
+	} satisfies Record<NodeId, { title: string; sub: string; subShort: string; glyph: string }>,
 
 	labels: {
 		libraryPage: "library page",
@@ -174,9 +195,11 @@ export const diagram = {
 		{
 			id: "overview",
 			chip: "Overview",
+			chipShort: "",
 			title: "How it works",
 			caption:
 				"Photos Swipe runs inside your signed-in Google Photos tab. Your photos and videos only travel between Google and your browser.",
+			captionShort: "It runs inside your signed-in Google Photos tab. Photos only travel between Google and your browser.",
 			active: [],
 			routes: [],
 			labels: ["appCode"],
@@ -184,9 +207,11 @@ export const diagram = {
 		{
 			id: "read",
 			chip: "1 · Read",
+			chipShort: "Read",
 			title: "1 · Read your library",
 			caption:
 				"The userscript calls the same web API photos.google.com uses, with the session you're already signed in with. No password, and no Google API permissions to grant.",
+			captionShort: "It calls the same web API as photos.google.com, with your existing session. No password, no permissions to grant.",
 			active: ["userscript", "api"],
 			routes: [{ id: "toApi", dir: "out" }],
 			labels: ["libraryPage"],
@@ -194,9 +219,11 @@ export const diagram = {
 		{
 			id: "preview",
 			chip: "2 · Preview",
+			chipShort: "Preview",
 			title: "2 · Preload previews",
 			caption:
 				"Previews for the next few photos load straight from Google's media servers into the tab, so swipes feel instant.",
+			captionShort: "The next few previews load straight from Google's media servers, so swipes feel instant.",
 			active: ["userscript", "media"],
 			routes: [{ id: "toMedia", dir: "in" }],
 			labels: ["upcomingPreviews"],
@@ -204,9 +231,11 @@ export const diagram = {
 		{
 			id: "swipe",
 			chip: "3 · Swipe",
+			chipShort: "Swipe",
 			title: "3 · Swipe = a local decision",
 			caption:
 				"Each swipe is saved to IndexedDB on your device. Nothing is deleted. Optional sync shares item IDs, decisions and progress, never photos, names, locations or preview links.",
+			captionShort: "Each swipe is saved on your device. Nothing is deleted. Optional sync shares only IDs, decisions and progress.",
 			active: ["userscript", "storage", "worker"],
 			routes: [
 				{ id: "toStorage", dir: "out" },
@@ -217,9 +246,11 @@ export const diagram = {
 		{
 			id: "trash",
 			chip: "4 · Trash",
+			chipShort: "Trash",
 			title: "4 · Review, then move to Trash",
 			caption:
 				"After you review, marked items move to Google Photos Trash in batches of 25 through the web API, and each batch is confirmed in Trash. Restorable for 60 days.",
+			captionShort: "After review, marked items move to Trash in batches of 25, and each batch is verified. Restorable for 60 days.",
 			active: ["userscript", "api", "trash"],
 			routes: [
 				{ id: "toApi", dir: "out" },
@@ -230,8 +261,11 @@ export const diagram = {
 	] as Array<{
 		id: string;
 		chip: string;
+		/** Phone segmented-control label; empty shows the overview icon. */
+		chipShort: string;
 		title: string;
 		caption: string;
+		captionShort: string;
 		active: NodeId[];
 		routes: Array<{ id: RouteId; dir: "out" | "in" }>;
 		labels: LabelId[];
