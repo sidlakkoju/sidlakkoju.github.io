@@ -1,0 +1,980 @@
+---
+// "How it works" animated diagram (Figma component 15:996, storyboard 16:691).
+// All copy comes from src/data/photos-swipe.ts; geometry lives here.
+import Icon from "./Icon.astro";
+import { diagram, type NodeId, type LabelId, type RouteId } from "../data/photos-swipe";
+
+const { nodes, labels, steps } = diagram;
+const first = steps[0];
+
+// ---- Desktop geometry (1200x600 stage) -----------------------------------
+const nodeBox: Record<NodeId, { x: number; y: number; w: number; h: number }> = {
+	userscript: { x: 80, y: 150, w: 360, h: 110 },
+	storage: { x: 80, y: 410, w: 360, h: 96 },
+	api: { x: 760, y: 70, w: 400, h: 88 },
+	media: { x: 760, y: 186, w: 400, h: 88 },
+	trash: { x: 760, y: 302, w: 400, h: 88 },
+	worker: { x: 760, y: 456, w: 400, h: 88 },
+};
+
+// Wire segments. A route lights up its segments and carries the packets.
+const segments = {
+	bus: "M440 205H660",
+	spApi: "M660 205V114",
+	brApi: "M660 114H760",
+	spMedia: "M660 205V230",
+	brMedia: "M660 230H760",
+	spTrash: "M660 205V346",
+	brTrash: "M660 346H760",
+	spWorker: "M660 205V500",
+	brWorker: "M660 500H760",
+	local: "M260 260V410",
+};
+type SegmentId = keyof typeof segments;
+const dashedSegments: SegmentId[] = ["brWorker"];
+
+const routes: Record<RouteId, { path: string; segments: SegmentId[] }> = {
+	toApi: { path: "M440 205H660V114H760", segments: ["bus", "spApi", "brApi"] },
+	toMedia: { path: "M440 205H660V230H760", segments: ["bus", "spMedia", "brMedia"] },
+	toTrash: { path: "M440 205H660V346H760", segments: ["bus", "spTrash", "brTrash"] },
+	toWorker: { path: "M440 205H660V500H760", segments: ["bus", "spWorker", "brWorker"] },
+	toStorage: { path: "M260 260V410", segments: ["local"] },
+};
+
+// Wire-label pills: `left` or `right` (distance from the stage's right edge).
+const labelPos: Record<LabelId, { left?: number; right?: number; top: number }> = {
+	libraryPage: { right: 552, top: 96 },
+	moveBatch: { right: 552, top: 96 },
+	upcomingPreviews: { right: 552, top: 218 },
+	verify: { right: 552, top: 333 },
+	keepTrash: { left: 272, top: 318 },
+	idsDecisions: { right: 552, top: 468 },
+	appCode: { left: 676, top: 522 },
+};
+
+// ---- Mobile (vertical) mapping ------------------------------------------
+// Routes collapse onto three vertical wires: inside the tab, tab -> Google,
+// and Google -> Worker.
+const mobileWires: Record<RouteId, string[]> = {
+	toApi: ["google"],
+	toMedia: ["google"],
+	toTrash: ["google"],
+	toWorker: ["google", "worker"],
+	toStorage: ["local"],
+};
+const mobileLabelWire: Record<LabelId, string> = {
+	libraryPage: "google",
+	upcomingPreviews: "google",
+	moveBatch: "google",
+	verify: "google",
+	keepTrash: "local",
+	idsDecisions: "worker",
+	appCode: "worker",
+};
+const labelsFor = (wire: string) => (Object.keys(labels) as LabelId[]).filter((l) => mobileLabelWire[l] === wire);
+
+// Everything the client script needs, derived from the data above.
+const clientSteps = steps.map((s) => ({
+	id: s.id,
+	title: s.title,
+	caption: s.caption,
+	active: s.active,
+	labels: s.labels,
+	routes: s.routes.map((r) => ({ id: r.id, dir: r.dir })),
+	segments: [...new Set(s.routes.flatMap((r) => routes[r.id].segments))],
+	mobileWires: s.routes.flatMap((r) => mobileWires[r.id].map((w) => ({ id: w, dir: r.dir }))),
+}));
+
+const glyphIcon = (glyph: string) => glyph as "hard-drive" | "braces" | "download" | "trash" | "sync";
+const isActive = (id: NodeId) => first.active.includes(id);
+---
+
+<section class="hiw" id="how-it-works" aria-labelledby="hiw-title">
+	<h2 id="hiw-title" class="hiw-title">{diagram.heading}</h2>
+	<p class="hiw-sub">{diagram.subheading}</p>
+
+	<div class="hiw-diagram" data-hiw data-step={first.id} data-steps={JSON.stringify(clientSteps)}>
+		<!-- Desktop: one 1200x600 stage, scaled to fit. -->
+		<div class="hiw-frame">
+			<div class="hiw-stage">
+				<svg class="hiw-wires" viewBox="0 0 1200 600" aria-hidden="true">
+					<defs>
+						<filter id="hiw-glow" x="-50%" y="-50%" width="200%" height="200%">
+							<feGaussianBlur stdDeviation="4" result="b" />
+							<feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+						</filter>
+					</defs>
+					<rect class="hiw-group" x="740.5" y="52.5" width="439" height="351" rx="24" />
+					<!-- Neutral wiring -->
+					<path class="hiw-wire" d="M440 205H660M660 114V500M660 114H760M660 230H760M660 346H760M260 260V410" />
+					<path class="hiw-wire hiw-wire--dashed" d="M660 500H760" />
+					<path class="hiw-appcode" class:list={[first.labels.includes("appCode") && "is-shown"]} d="M760 513H669V214H440" />
+					<!-- Active overlays -->
+					{
+						(Object.keys(segments) as SegmentId[]).map((id) => (
+							<path
+								class:list={["hiw-seg", dashedSegments.includes(id) && "hiw-seg--dashed"]}
+								data-seg={id}
+								d={segments[id]}
+							/>
+						))
+					}
+					<!-- Packet tracks (invisible) and the packets themselves -->
+					{(Object.keys(routes) as RouteId[]).map((id) => <path class="hiw-track" data-track={id} d={routes[id].path} />)}
+					<g class="hiw-packets" filter="url(#hiw-glow)"></g>
+				</svg>
+
+				<div class="hiw-tab">
+					<span class="hiw-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+					<span class="hiw-tab-label">{diagram.tabLabel}</span>
+				</div>
+				<span class="hiw-eyebrow lg-eyebrow" style="top: 30px">{diagram.groupLabel}</span>
+				<span class="hiw-eyebrow lg-eyebrow" style="top: 434px">{diagram.optionalLabel}</span>
+
+				{
+					(Object.keys(nodes) as NodeId[]).map((id) => {
+						const n = nodes[id];
+						const b = nodeBox[id];
+						return (
+							<div
+								class:list={["hiw-node", `hiw-node--${id}`, isActive(id) && "is-active"]}
+								data-node={id}
+								style={`left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px`}
+							>
+								{n.glyph === "app" ? (
+									<img class="hiw-appicon" src="/photos-swipe/icon.png" alt="" width="52" height="52" />
+								) : (
+									<span class="hiw-glyph">
+										<Icon name={glyphIcon(n.glyph)} size={22} />
+									</span>
+								)}
+								<span class="hiw-node-text">
+									<span class="hiw-node-title">{n.title}</span>
+									<span class="hiw-node-sub">{n.sub}</span>
+								</span>
+							</div>
+						);
+					})
+				}
+
+				{
+					(Object.keys(labels) as LabelId[]).map((id) => {
+						const p = labelPos[id];
+						const pos = p.left != null ? `left:${p.left}px` : `right:${p.right}px`;
+						return (
+							<span
+								class:list={["hiw-label", first.labels.includes(id) && "is-shown"]}
+								data-label={id}
+								style={`${pos};top:${p.top}px`}
+							>
+								{labels[id]}
+							</span>
+						);
+					})
+				}
+			</div>
+		</div>
+
+		<!-- Mobile: the same diagram, stacked, with the bus as a vertical spine. -->
+		<div class="hiw-stack">
+			<div class="hiw-s-tab">
+				<div class="hiw-s-tabhead">
+					<span class="hiw-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+					<span class="hiw-tab-label">{diagram.tabLabelShort}</span>
+				</div>
+				{
+					(["userscript", "local", "storage"] as const).map((item) =>
+						item === "local" ? (
+							<div class="hiw-s-wire hiw-s-wire--short" data-wire="local">
+								<span class="hiw-s-line" aria-hidden="true">
+									<i class="pk" />
+									<i class="pk" />
+									<i class="pk" />
+								</span>
+								<span class="hiw-s-labels">
+									{labelsFor("local").map((l) => (
+										<span class:list={["hiw-label", first.labels.includes(l) && "is-shown"]} data-label={l}>
+											{labels[l]}
+										</span>
+									))}
+								</span>
+							</div>
+						) : (
+							<div class:list={["hiw-node", "hiw-s-node", isActive(item) && "is-active"]} data-node={item}>
+								{nodes[item].glyph === "app" ? (
+									<img class="hiw-appicon" src="/photos-swipe/icon.png" alt="" width="36" height="36" />
+								) : (
+									<span class="hiw-glyph">
+										<Icon name={glyphIcon(nodes[item].glyph)} size={18} />
+									</span>
+								)}
+								<span class="hiw-node-text">
+									<span class="hiw-node-title">{nodes[item].title}</span>
+									<span class="hiw-node-sub">{nodes[item].sub}</span>
+								</span>
+							</div>
+						),
+					)
+				}
+			</div>
+
+			{
+				(["google", "worker"] as const).map((wire) => (
+					<Fragment>
+						<div class:list={["hiw-s-wire", wire === "worker" && "hiw-s-wire--dashed"]} data-wire={wire}>
+							<span class="hiw-s-line" aria-hidden="true">
+								<i class="pk" />
+								<i class="pk" />
+								<i class="pk" />
+							</span>
+							<span class="hiw-s-labels">
+								{labelsFor(wire).map((l) => (
+									<span class:list={["hiw-label", first.labels.includes(l) && "is-shown"]} data-label={l}>
+										{labels[l]}
+									</span>
+								))}
+							</span>
+						</div>
+						{wire === "google" ? (
+							<div class="hiw-s-group">
+								<span class="lg-eyebrow">{diagram.groupLabel}</span>
+								{(["api", "media", "trash"] as const).map((id) => (
+									<div class:list={["hiw-node", "hiw-s-node", isActive(id) && "is-active"]} data-node={id}>
+										<span class="hiw-glyph">
+											<Icon name={glyphIcon(nodes[id].glyph)} size={18} />
+										</span>
+										<span class="hiw-node-text">
+											<span class="hiw-node-title">{nodes[id].title}</span>
+											<span class="hiw-node-sub">{nodes[id].sub}</span>
+										</span>
+									</div>
+								))}
+							</div>
+						) : (
+							<div class:list={["hiw-node", "hiw-s-node", "hiw-node--worker", isActive("worker") && "is-active"]} data-node="worker">
+								<span class="hiw-glyph">
+									<Icon name="sync" size={18} />
+								</span>
+								<span class="hiw-node-text">
+									<span class="hiw-node-title">{nodes.worker.title}</span>
+									<span class="hiw-node-sub">{nodes.worker.sub}</span>
+								</span>
+							</div>
+						)}
+					</Fragment>
+				))
+			}
+		</div>
+	</div>
+
+	<div class="hiw-chips" role="group" aria-label="How it works steps">
+		{
+			steps.map((s, i) => (
+				<button
+					type="button"
+					class="lg-chip hiw-chip"
+					data-index={i}
+					aria-pressed={i === 0 ? "true" : "false"}
+					aria-controls="hiw-caption"
+					tabindex={i === 0 ? 0 : -1}
+				>
+					{s.chip}
+				</button>
+			))
+		}
+	</div>
+	<p class="hiw-caption" id="hiw-caption" aria-live="polite">
+		<span class="lg-visually-hidden" data-caption-title>{first.title}: </span>
+		<span data-caption-text>{first.caption}</span>
+	</p>
+	<p class="hiw-footnote">{diagram.footnote}</p>
+</section>
+
+<script>
+	type Step = {
+		id: string;
+		title: string;
+		caption: string;
+		active: string[];
+		labels: string[];
+		routes: { id: string; dir: "out" | "in" }[];
+		segments: string[];
+		mobileWires: { id: string; dir: "out" | "in" }[];
+	};
+
+	const STEP_MS = 3500;
+	const PACKET_MS = 900;
+	const PACKET_GAP = 250;
+	const PACKET_CYCLE = 1600;
+	const PACKETS_PER_ROUTE = 3;
+
+	for (const root of document.querySelectorAll<HTMLElement>("[data-hiw]")) {
+		const section = root.closest("section")!;
+		const steps: Step[] = JSON.parse(root.dataset.steps!);
+		const chips = [...section.querySelectorAll<HTMLButtonElement>(".hiw-chip")];
+		const captionTitle = section.querySelector<HTMLElement>("[data-caption-title]")!;
+		const captionText = section.querySelector<HTMLElement>("[data-caption-text]")!;
+		const frame = root.querySelector<HTMLElement>(".hiw-frame")!;
+		const packetLayer = root.querySelector<SVGGElement>(".hiw-packets")!;
+		const appCode = root.querySelector<SVGPathElement>(".hiw-appcode")!;
+		const tracks = new Map<string, { el: SVGPathElement; len: number }>();
+		for (const el of root.querySelectorAll<SVGPathElement>(".hiw-track")) {
+			tracks.set(el.dataset.track!, { el, len: el.getTotalLength() });
+		}
+
+		const reduceMQ = window.matchMedia("(prefers-reduced-motion: reduce)");
+		const desktopMQ = window.matchMedia("(min-width: 760px)");
+		let index = 0;
+		let autoplay = !reduceMQ.matches;
+		let inView = false;
+		let timer = 0;
+		let raf = 0;
+		let stepStart = performance.now();
+
+		// ---- Scale the 1200x600 stage to the frame width ----
+		const fit = () => {
+			const w = frame.clientWidth;
+			if (w > 0) frame.style.setProperty("--hiw-scale", String(Math.min(1, w / 1200)));
+		};
+		new ResizeObserver(fit).observe(frame);
+		fit();
+
+		// ---- Steps ----
+		function show(i: number) {
+			index = (i + steps.length) % steps.length;
+			const s = steps[index];
+			root.dataset.step = s.id;
+			for (const el of root.querySelectorAll<HTMLElement>("[data-node]")) {
+				el.classList.toggle("is-active", s.active.includes(el.dataset.node!));
+			}
+			for (const el of root.querySelectorAll<SVGPathElement>("[data-seg]")) {
+				el.classList.toggle("is-active", s.segments.includes(el.dataset.seg!));
+			}
+			for (const el of root.querySelectorAll<HTMLElement>("[data-label]")) {
+				el.classList.toggle("is-shown", s.labels.includes(el.dataset.label!));
+			}
+			appCode.classList.toggle("is-shown", s.labels.includes("appCode"));
+			for (const el of root.querySelectorAll<HTMLElement>("[data-wire]")) {
+				const w = s.mobileWires.find((m) => m.id === el.dataset.wire);
+				el.classList.toggle("is-active", !!w);
+				el.classList.toggle("dir-in", w?.dir === "in");
+			}
+			chips.forEach((c, j) => {
+				c.setAttribute("aria-pressed", String(j === index));
+				c.tabIndex = j === index ? 0 : -1;
+			});
+			captionTitle.textContent = `${s.title}: `;
+			captionText.textContent = s.caption;
+			stepStart = performance.now();
+			buildPackets();
+		}
+
+		function startAutoplay() {
+			stopAutoplay();
+			if (autoplay && inView) timer = window.setInterval(() => show(index + 1), STEP_MS);
+		}
+		function stopAutoplay() {
+			window.clearInterval(timer);
+			timer = 0;
+		}
+
+		chips.forEach((chip, j) => {
+			chip.addEventListener("click", () => {
+				autoplay = false;
+				stopAutoplay();
+				show(j);
+			});
+		});
+		section.querySelector(".hiw-chips")!.addEventListener("keydown", (e) => {
+			const key = (e as KeyboardEvent).key;
+			const next =
+				key === "ArrowRight" || key === "ArrowDown" ? index + 1
+				: key === "ArrowLeft" || key === "ArrowUp" ? index - 1
+				: key === "Home" ? 0
+				: key === "End" ? steps.length - 1
+				: null;
+			if (next === null) return;
+			e.preventDefault();
+			autoplay = false;
+			stopAutoplay();
+			show(next);
+			chips[index].focus();
+		});
+
+		// ---- Packets (desktop SVG; the stacked layout uses CSS) ----
+		type Packet = { el: SVGCircleElement; track: { el: SVGPathElement; len: number }; dir: "out" | "in"; delay: number };
+		let packets: Packet[] = [];
+		const NS = "http://www.w3.org/2000/svg";
+		const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+
+		function buildPackets() {
+			packetLayer.replaceChildren();
+			packets = [];
+			if (reduceMQ.matches) return;
+			for (const r of steps[index].routes) {
+				const track = tracks.get(r.id);
+				if (!track) continue;
+				for (let k = 0; k < PACKETS_PER_ROUTE; k++) {
+					const el = document.createElementNS(NS, "circle");
+					el.setAttribute("r", "5");
+					el.setAttribute("class", "hiw-packet");
+					el.style.opacity = "0";
+					packetLayer.append(el);
+					packets.push({ el, track, dir: r.dir, delay: k * PACKET_GAP });
+				}
+			}
+			loop();
+		}
+
+		function tick(now: number) {
+			raf = 0;
+			const t = now - stepStart;
+			for (const p of packets) {
+				const local = (t - p.delay) % PACKET_CYCLE;
+				if (t < p.delay || local > PACKET_MS) {
+					p.el.style.opacity = "0";
+					continue;
+				}
+				const f = ease(local / PACKET_MS);
+				const at = p.track.len * (p.dir === "out" ? f : 1 - f);
+				const pt = p.track.el.getPointAtLength(at);
+				p.el.setAttribute("cx", pt.x.toFixed(1));
+				p.el.setAttribute("cy", pt.y.toFixed(1));
+				p.el.style.opacity = "1";
+			}
+			loop();
+		}
+		function loop() {
+			if (!raf && packets.length && inView && desktopMQ.matches && !reduceMQ.matches) raf = requestAnimationFrame(tick);
+		}
+
+		// ---- Visibility ----
+		new IntersectionObserver(
+			(entries) => {
+				inView = entries[0].isIntersecting;
+				root.classList.toggle("in-view", inView);
+				if (inView) {
+					startAutoplay();
+					loop();
+				} else {
+					stopAutoplay();
+				}
+			},
+			{ threshold: 0.35 },
+		).observe(root);
+
+		desktopMQ.addEventListener("change", loop);
+		reduceMQ.addEventListener("change", () => {
+			if (reduceMQ.matches) {
+				autoplay = false;
+				stopAutoplay();
+			}
+			buildPackets();
+		});
+
+		show(0);
+	}
+</script>
+
+<style>
+	.hiw {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+	}
+	.hiw-title {
+		margin: 0;
+		font-family: var(--lg-font-display);
+		font-size: 48px;
+		line-height: 54px;
+		font-weight: 700;
+		letter-spacing: -1px;
+	}
+	.hiw-sub {
+		margin: 8px 0 0;
+		font-size: 17px;
+		line-height: 26px;
+		letter-spacing: -0.4px;
+		color: var(--lg-label-secondary);
+	}
+	.hiw-diagram {
+		width: 100%;
+		margin-top: 8px;
+		text-align: left;
+	}
+
+	/* ---- Desktop stage ---- */
+	.hiw-frame {
+		--hiw-scale: 1;
+		position: relative;
+		width: 100%;
+		max-width: 1200px;
+		height: calc(600px * var(--hiw-scale));
+		margin: 0 auto;
+	}
+	.hiw-stage {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 1200px;
+		height: 600px;
+		transform: scale(var(--hiw-scale));
+		transform-origin: 0 0;
+	}
+	.hiw-wires {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		overflow: visible;
+		fill: none;
+	}
+	.hiw-group {
+		stroke: var(--lg-glass-stroke);
+		stroke-width: 1;
+		stroke-dasharray: 3 4;
+	}
+	.hiw-wire {
+		stroke: var(--lg-glass-stroke);
+		stroke-width: 2;
+		stroke-linecap: round;
+	}
+	.hiw-wire--dashed {
+		stroke-dasharray: 5 5;
+		stroke-linecap: butt;
+	}
+	.hiw-appcode {
+		stroke: rgba(235, 235, 245, 0.32);
+		stroke-width: 1.25;
+		stroke-dasharray: 3 4;
+		opacity: 0;
+		transition: opacity 0.3s ease;
+	}
+	.hiw-appcode.is-shown {
+		opacity: 1;
+	}
+	.hiw-seg {
+		stroke: var(--lg-accent-blue);
+		stroke-width: 3;
+		stroke-linecap: round;
+		opacity: 0;
+		filter: drop-shadow(0 0 5px rgba(10, 133, 255, 0.8));
+		transition: opacity 0.3s ease;
+	}
+	.hiw-seg--dashed {
+		stroke-dasharray: 6 5;
+		stroke-linecap: butt;
+	}
+	.hiw-seg.is-active {
+		opacity: 1;
+	}
+	.hiw-track {
+		stroke: none;
+	}
+	.hiw-wires :global(.hiw-packet) {
+		fill: #cfe6ff;
+		stroke: var(--lg-accent-blue);
+		stroke-width: 1.5;
+	}
+
+	.hiw-tab {
+		position: absolute;
+		left: 40px;
+		top: 40px;
+		width: 440px;
+		height: 520px;
+		box-sizing: border-box;
+		border-radius: var(--lg-radius-lg);
+		background: var(--lg-glass-fill);
+		box-shadow: var(--lg-hairline), var(--lg-shadow-regular);
+	}
+	.hiw-tab .hiw-dots {
+		position: absolute;
+		left: 19px;
+		top: 21px;
+	}
+	.hiw-tab .hiw-tab-label {
+		position: absolute;
+		left: 79px;
+		top: 17px;
+	}
+	.hiw-dots {
+		display: inline-flex;
+		gap: 6px;
+	}
+	.hiw-dots i {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: #ff5f57;
+	}
+	.hiw-dots i:nth-child(2) {
+		background: #febc2e;
+	}
+	.hiw-dots i:nth-child(3) {
+		background: #28c840;
+	}
+	.hiw-tab-label {
+		font-size: 13px;
+		line-height: 18px;
+		color: var(--lg-label-secondary);
+		white-space: nowrap;
+	}
+	.hiw-eyebrow {
+		position: absolute;
+		right: 20px;
+	}
+
+	.hiw-node {
+		position: absolute;
+		display: flex;
+		align-items: center;
+		gap: 14px;
+		box-sizing: border-box;
+		padding: 0 16px;
+		border-radius: var(--lg-radius-md);
+		background: var(--lg-glass-fill);
+		box-shadow: var(--lg-hairline), var(--lg-shadow-clear);
+		transition:
+			opacity 0.35s ease,
+			box-shadow 0.35s ease,
+			background-color 0.35s ease;
+	}
+	.hiw-node--userscript {
+		background: var(--lg-glass-fill-strong);
+	}
+	.hiw-node--worker {
+		box-shadow: var(--lg-shadow-clear);
+		outline: 1.5px dashed var(--lg-glass-stroke);
+		outline-offset: -1.5px;
+	}
+	.hiw-node.is-active {
+		background-color: rgba(10, 132, 255, 0.14);
+		box-shadow:
+			inset 0 0 0 1.5px var(--lg-accent-blue),
+			0 0 28px rgba(10, 132, 255, 0.22),
+			var(--lg-shadow-clear);
+	}
+	.hiw-node--worker.is-active {
+		box-shadow:
+			0 0 28px rgba(10, 132, 255, 0.22),
+			var(--lg-shadow-clear);
+		outline-color: var(--lg-accent-blue);
+	}
+	/* Once a step is selected, everything it doesn't touch steps back. */
+	.hiw-diagram:not([data-step="overview"]) .hiw-node:not(.is-active) {
+		opacity: 0.4;
+	}
+	.hiw-appicon {
+		flex: none;
+		width: 52px;
+		height: 52px;
+		border-radius: 12px;
+	}
+	.hiw-glyph {
+		flex: none;
+		display: grid;
+		place-items: center;
+		width: 44px;
+		height: 44px;
+		border-radius: var(--lg-radius-sm);
+		background: var(--lg-glass-fill-strong);
+		color: var(--lg-label);
+	}
+	.hiw-node-text {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+	.hiw-node-title {
+		font-size: 17px;
+		line-height: 22px;
+		font-weight: 600;
+		letter-spacing: -0.4px;
+	}
+	.hiw-node-sub {
+		font-size: 13px;
+		line-height: 18px;
+		color: var(--lg-label-secondary);
+	}
+
+	.hiw-label {
+		position: absolute;
+		padding: 4px 10px 5px;
+		border-radius: var(--lg-radius-pill);
+		background: rgba(40, 40, 46, 0.92);
+		box-shadow: var(--lg-hairline), var(--lg-shadow-clear);
+		font-size: 13px;
+		line-height: 18px;
+		white-space: nowrap;
+		opacity: 0;
+		transform: translateY(3px);
+		transition:
+			opacity 0.25s ease,
+			transform 0.25s ease;
+	}
+	.hiw-label.is-shown {
+		opacity: 1;
+		transform: none;
+		/* Wire labels fade in just after the packets start. */
+		transition-delay: 0.15s;
+	}
+
+	/* ---- Stacked (mobile) ---- */
+	.hiw-stack {
+		display: none;
+		flex-direction: column;
+		align-items: stretch;
+	}
+	.hiw-s-tab,
+	.hiw-s-group {
+		display: flex;
+		flex-direction: column;
+		border-radius: var(--lg-radius-lg);
+	}
+	.hiw-s-tab {
+		padding: 13px 15px 15px;
+		background: var(--lg-glass-fill);
+		box-shadow: var(--lg-hairline), var(--lg-shadow-regular);
+	}
+	.hiw-s-tabhead {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		height: 28px;
+		margin-bottom: 0;
+	}
+	.hiw-s-tabhead .hiw-dots {
+		gap: 6px;
+	}
+	.hiw-s-tabhead .hiw-dots i {
+		width: 8px;
+		height: 8px;
+	}
+	.hiw-s-group {
+		gap: 8px;
+		padding: 13px;
+		border: 1px dashed var(--lg-glass-stroke);
+	}
+	.hiw-s-group > .lg-eyebrow {
+		margin-bottom: 0;
+	}
+	.hiw-s-node {
+		position: relative;
+		min-height: 60px;
+		padding: 11px 13px;
+		gap: 12px;
+	}
+	.hiw-s-node .hiw-appicon {
+		width: 36px;
+		height: 36px;
+		border-radius: 9px;
+	}
+	.hiw-s-node .hiw-glyph {
+		width: 36px;
+		height: 36px;
+		border-radius: 10px;
+	}
+	.hiw-s-node .hiw-node-title {
+		font-size: 15px;
+		line-height: 20px;
+		letter-spacing: -0.2px;
+	}
+	.hiw-s-wire {
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 30px;
+	}
+	.hiw-s-wire--short {
+		min-height: 22px;
+	}
+	.hiw-s-line {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 50%;
+		width: 2px;
+		margin-left: -1px;
+		background: var(--lg-glass-stroke);
+		transition: background-color 0.3s ease, box-shadow 0.3s ease;
+	}
+	.hiw-s-wire--dashed .hiw-s-line {
+		background: repeating-linear-gradient(to bottom, var(--lg-glass-stroke) 0 4px, transparent 4px 8px);
+	}
+	.hiw-s-wire.is-active .hiw-s-line {
+		width: 3px;
+		margin-left: -1.5px;
+		background: var(--lg-accent-blue);
+		box-shadow: 0 0 10px rgba(10, 133, 255, 0.8);
+	}
+	.hiw-s-wire--dashed.is-active .hiw-s-line {
+		background: repeating-linear-gradient(to bottom, var(--lg-accent-blue) 0 5px, transparent 5px 9px);
+	}
+	/* Label pills sit centered on the wire, over the line. */
+	.hiw-s-labels {
+		position: relative;
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 6px;
+		padding: 6px 0;
+	}
+	.hiw-s-labels:not(:has(.is-shown)) {
+		padding: 0;
+	}
+	.hiw-s-labels .hiw-label {
+		position: static;
+		display: none;
+	}
+	.hiw-s-labels .hiw-label.is-shown {
+		display: block;
+	}
+	.pk {
+		position: absolute;
+		left: 50%;
+		top: 0;
+		width: 10px;
+		height: 10px;
+		margin: -5px 0 0 -5px;
+		border-radius: 50%;
+		background: #cfe6ff;
+		box-shadow:
+			0 0 0 1.5px var(--lg-accent-blue),
+			0 0 10px 2px rgba(10, 133, 255, 0.85);
+		opacity: 0;
+	}
+
+	@media (max-width: 759px) {
+		.hiw {
+			align-items: stretch;
+			text-align: left;
+		}
+		.hiw-title {
+			font-size: 28px;
+			line-height: 34px;
+			letter-spacing: -0.5px;
+		}
+		.hiw-frame {
+			display: none;
+		}
+		.hiw-stack {
+			display: flex;
+		}
+		.hiw-diagram {
+			margin-top: 12px;
+		}
+	}
+
+	@media (prefers-reduced-motion: no-preference) {
+		.in-view .hiw-s-wire.is-active .pk {
+			animation: hiw-packet 1.6s infinite;
+		}
+		.in-view .hiw-s-wire.is-active .pk:nth-child(2) {
+			animation-delay: 0.25s;
+		}
+		.in-view .hiw-s-wire.is-active .pk:nth-child(3) {
+			animation-delay: 0.5s;
+		}
+		.in-view .hiw-s-wire.is-active.dir-in .pk {
+			animation-name: hiw-packet-in;
+		}
+	}
+	@keyframes hiw-packet {
+		0% {
+			top: 0;
+			opacity: 0;
+			animation-timing-function: ease-in-out;
+		}
+		4% {
+			opacity: 1;
+		}
+		52% {
+			opacity: 1;
+		}
+		56% {
+			top: 100%;
+			opacity: 0;
+		}
+		100% {
+			top: 100%;
+			opacity: 0;
+		}
+	}
+	@keyframes hiw-packet-in {
+		0% {
+			top: 100%;
+			opacity: 0;
+			animation-timing-function: ease-in-out;
+		}
+		4% {
+			opacity: 1;
+		}
+		52% {
+			opacity: 1;
+		}
+		56% {
+			top: 0;
+			opacity: 0;
+		}
+		100% {
+			top: 0;
+			opacity: 0;
+		}
+	}
+
+	/* ---- Chips + caption ---- */
+	.hiw-chips {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 8px;
+		margin-top: 8px;
+	}
+	.hiw-chip {
+		background: var(--lg-glass-fill);
+		box-shadow: var(--lg-hairline);
+	}
+	.hiw-chip[aria-pressed="true"] {
+		background: var(--lg-tint-blue);
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+	}
+	.hiw-caption {
+		max-width: 840px;
+		min-height: 52px;
+		margin: 16px auto 0;
+		font-size: 15px;
+		line-height: 20px;
+		letter-spacing: -0.2px;
+		color: var(--lg-label);
+		text-wrap: pretty;
+	}
+	.hiw-footnote {
+		max-width: 720px;
+		margin: 8px auto 0;
+		font-size: 13px;
+		line-height: 18px;
+		color: var(--lg-label-tertiary);
+		text-wrap: pretty;
+	}
+	@media (max-width: 759px) {
+		.hiw-chips {
+			justify-content: flex-start;
+			gap: 6px;
+			margin-top: 12px;
+		}
+		.hiw-caption,
+		.hiw-footnote {
+			margin-left: 0;
+			margin-right: 0;
+		}
+		.hiw-caption {
+			min-height: 80px;
+			font-size: 17px;
+			line-height: 22px;
+		}
+	}
+</style>

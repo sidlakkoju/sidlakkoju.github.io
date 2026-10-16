@@ -82,6 +82,22 @@ pub extern "C" fn remove_body(i: i32) {
     WORLD.with_borrow_mut(|w| w.remove_body(i as usize));
 }
 
+/// 1 if a press at (x, y) (CSS px) would start dragging a body or a velocity
+/// handle. The page uses it to decide whether a touch belongs to the sim or
+/// should scroll the page.
+#[no_mangle]
+pub extern "C" fn grab_at(x: f32, y: f32) -> i32 {
+    if PAUSED.load(Ordering::Relaxed) == 0 {
+        return 0;
+    }
+    let p = vec2(x, y);
+    WORLD.with_borrow(|w| {
+        w.bodies
+            .iter()
+            .any(|b| hit_circle(velocity_tip(b), TIP_HIT_RADIUS, p) || hit_circle(b.pos, b.radius, p)) as i32
+    })
+}
+
 /// `dir` is +1 or -1: one MASS_STEP up or down.
 #[no_mangle]
 pub extern "C" fn step_mass(i: i32, dir: i32) {
@@ -111,13 +127,19 @@ fn stepper_center(b: &Body) -> Vec2 {
     b.pos + vec2(0.0, b.radius + CTL_GAP + CTL_STEPPER_HALF.y)
 }
 
-#[derive(Default)]
 struct Sprite {
     texture: Option<Texture2D>,
     // Raw RGBA waiting to become a texture on the next frame.
     pending: Option<(u16, u16, Vec<u8>)>,
     dest: Rect,
     offset: Vec2,
+    alpha: f32,
+}
+
+impl Default for Sprite {
+    fn default() -> Self {
+        Sprite { texture: None, pending: None, dest: Rect::default(), offset: Vec2::ZERO, alpha: 1.0 }
+    }
 }
 
 impl Sprite {
@@ -176,6 +198,15 @@ pub extern "C" fn ui_offset(slot: i32, dx: f32, dy: f32) {
     OVERLAY.with_borrow_mut(|o| {
         let sprite = if slot == 0 { &mut o.hero } else { &mut o.icons };
         sprite.offset = vec2(dx, dy);
+    });
+}
+
+/// Opacity of the uploaded headline (it fades as the page scrolls).
+#[no_mangle]
+pub extern "C" fn ui_alpha(slot: i32, alpha: f32) {
+    OVERLAY.with_borrow_mut(|o| {
+        let sprite = if slot == 0 { &mut o.hero } else { &mut o.icons };
+        sprite.alpha = alpha.clamp(0.0, 1.0);
     });
 }
 
@@ -759,7 +790,7 @@ fn frame(w: &mut World, overlay: &mut Overlay, compositor: &mut Compositor) {
             .hero
             .texture
             .as_ref()
-            .map(|t| (t, overlay.hero.dest.offset(overlay.hero.offset))),
+            .map(|t| (t, overlay.hero.dest.offset(overlay.hero.offset), overlay.hero.alpha)),
         icons: overlay.icons.texture.as_ref().map(|t| (t, &overlay.icon_slots[..])),
     };
     let arrows = || {

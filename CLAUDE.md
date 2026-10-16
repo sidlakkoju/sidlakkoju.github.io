@@ -8,3 +8,8 @@
 - Performance: the page script never reads layout or computed styles per frame. Layout is measured once (and on resize), UI animations are JS springs, and the renderer/DOM are written only when values change. Keep it that way.
 - The headline and social icons are rasterized by the page and drawn inside the scene so the glass can refract them. Per-body control sizes are duplicated in `main.rs` (`CTL_*`) and `index.astro`; keep them in sync.
 - After changing Rust, rebuild the wasm (`cargo build --release --target wasm32-unknown-unknown`) and copy it to `site/public/sim/`.
+
+## Pages and shared styles
+- `site/src/layouts/BaseLayout.astro` owns the `<head>` (SEO, OG, icons, JSON-LD); pages add extras through its `head` slot. Liquid Glass tokens (`--lg-*`) and glass/button classes live in `site/src/styles/liquid-glass.css`. Don't name new classes `.glass`: on the homepage that class marks shapes the renderer draws.
+- The homepage scrolls over the fixed sim canvas. macroquad's canvas listeners `preventDefault` wheel, touch, and some keys, so the page script stops those in the capture phase unless the sim needs them (touches that `grab_at` a body while paused). The headline the renderer draws follows the scroll through `ui_offset` / `ui_alpha`.
+- Photos Swipe page copy, including every "How it works" diagram claim, lives in `site/src/data/photos-swipe.ts`. The live demo is a static build in `site/public/photos-swipe/demo/`; its postMessage contract is documented in `site/src/components/LiveDemo.astro`.
