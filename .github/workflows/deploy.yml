@@ -38,17 +38,23 @@ jobs:
         working-directory: gravity_simulation
         run: cargo build --release --target wasm32-unknown-unknown
 
-      - name: Copy wasm into Astro public dir
-        run: |
-          mkdir -p site/public/sim
-          cp gravity_simulation/target/wasm32-unknown-unknown/release/gravity_simulation.wasm site/public/sim/gravity_simulation.wasm
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: site/package-lock.json
+
+      # wasm-opt -Oz trims ~11% off what rustc emits (397 -> 353 KB). The
+      # feature flags are the ones rustc's wasm32 output uses; binaryen's
+      # defaults reject its bulk-memory ops.
+      - name: Optimize wasm and copy it into Astro public dir
+        run: |
+          mkdir -p site/public/sim
+          npx --yes -p binaryen@132.0.0 wasm-opt -Oz \
+            --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals \
+            gravity_simulation/target/wasm32-unknown-unknown/release/gravity_simulation.wasm \
+            -o site/public/sim/gravity_simulation.wasm
 
       - name: Install site dependencies
         working-directory: site

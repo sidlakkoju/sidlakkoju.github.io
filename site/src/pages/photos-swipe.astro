@@ -4,6 +4,7 @@ import Icon from "../components/Icon.astro";
 import LiveDemo from "../components/LiveDemo.astro";
 import HowItWorks from "../components/HowItWorks.astro";
 import InstallModal from "../components/InstallModal.astro";
+import ResponsiveImage from "../components/ResponsiveImage.astro";
 import { name, siteUrl, socialIcons } from "../data/site";
 import { intro, links } from "../data/photos-swipe";
 
@@ -78,7 +79,19 @@ const structuredData = {
 		<main class="ps-main">
 			<section class="ps-hero" aria-labelledby="ps-title">
 				<div class="ps-intro">
-					<img class="ps-icon" src="/photos-swipe/icon.png" alt="" width="96" height="96" data-morph style="view-transition-name: project-photos-swipe" />
+					<ResponsiveImage
+						class="ps-icon"
+						base="/photos-swipe/icon"
+						widths={[64, 128, 192, 288]}
+						sizes="(max-width: 699px) 80px, 96px"
+						fallback="png"
+						alt=""
+						width="96"
+						height="96"
+						decoding="async"
+						data-morph
+						style="view-transition-name: project-photos-swipe"
+					/>
 					<h1 id="ps-title" class="ps-title">{intro.title}</h1>
 					<p class="ps-lede">{intro.lede}</p>
 					<div class="ps-ctas">
@@ -533,9 +546,11 @@ const structuredData = {
 				rgba(40, 150, 170, 0) 92%
 			);
 		}
+		/* Peeking in at the right edge beside the app icon, the one spot in
+		   the hero with no content (it used to overlap the demo card). */
 		.orb--silver {
-			left: calc(100% - 60px);
-			top: 730px;
+			left: calc(100% - 40px);
+			top: 108px;
 			width: 60px;
 			height: 60px;
 		}

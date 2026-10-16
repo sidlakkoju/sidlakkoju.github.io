@@ -49,6 +49,14 @@ glass.disconnect(); // back to the CSS frosted fallback
 ```
 
 - `data-glass="clear"`: controls. `data-glass="frosted"`: cards and panels.
+- Nothing runs on the critical path. The maps are built after `load`, one
+  element per idle callback, and PNG-encoded off the main thread
+  (`canvas.toBlob`, blob URLs); each element keeps the CSS frosted glass until
+  its filter is ready. The distance field and normals are evaluated
+  analytically, so a map costs a few ms.
+- A refracting element that moves (a CSS animation, a transition) re-runs its
+  filter every frame on Chromium's main thread. Keep such motion short or
+  finite (the demo's coach mark nudges five times).
 - The element's own `border-radius` sets the shape.
 - Each element gets a displacement map built for its size and radius, rebuilt
   when its size changes (ResizeObserver). Same-size elements share a filter.

@@ -73,6 +73,10 @@ const structuredData = {
 		<script is:inline>
 			if (!matchMedia("(prefers-reduced-motion: reduce)").matches) window.mq_wasm_fetch = fetch("/sim/gravity_simulation.wasm");
 		</script>
+		<!-- Prefetch the project pages so opening one is instant: browsers with
+		     speculation rules fetch on hover or press; the others get the page
+		     script's fallback. -->
+		<script is:inline type="speculationrules" set:html={JSON.stringify({ prefetch: [{ urls: projects.map((p) => p.href), eagerness: "moderate" }] })} />
 		<!-- A project card's icon morphs into the project page's icon (and back)
 		     only while it's on screen; otherwise the pages just crossfade. -->
 		<script is:inline>
@@ -197,7 +201,6 @@ const structuredData = {
 
 		<script>
 			import { animateFavicon } from "../favicon.js";
-			import { initLiquidRefraction } from "../scripts/liquid-refraction";
 			animateFavicon();
 
 			const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -206,11 +209,34 @@ const structuredData = {
 			// The sim's renderer draws the shelf's glass once it runs (html.sim-glass).
 			// Without it (reduced motion, no WebGL, wasm failed), the shelf gets the
 			// SVG refraction fallback where supported, else the CSS frosted glass.
+			// Loaded only then: the sim normally draws this glass itself.
 			const glassFallback = () => {
-				if (!document.documentElement.classList.contains("sim-live")) initLiquidRefraction(document);
+				if (document.documentElement.classList.contains("sim-live")) return;
+				import("../scripts/liquid-refraction").then((m) => m.initLiquidRefraction(document));
 			};
 			if (reduce) glassFallback();
 			else setTimeout(glassFallback, 6000);
+
+			// Without speculation rules (older Safari, Firefox), warm the HTTP cache with
+			// a project page's HTML once its card is on screen (GitHub Pages
+			// lets it be reused for 10 minutes).
+			const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+			if (!HTMLScriptElement.supports?.("speculationrules") && !saveData && "IntersectionObserver" in window) {
+				const warmed = new Set<string>();
+				const io = new IntersectionObserver((entries) => {
+					for (const e of entries) {
+						if (!e.isIntersecting) continue;
+						const href = (e.target as HTMLAnchorElement).href;
+						io.unobserve(e.target);
+						if (warmed.has(href)) continue;
+						warmed.add(href);
+						const go = () => fetch(href, { priority: "low" } as RequestInit).catch(() => {});
+						if ("requestIdleCallback" in window) requestIdleCallback(go, { timeout: 2000 });
+						else setTimeout(go, 300);
+					}
+				});
+				for (const card of shelf.querySelectorAll(".project-card")) io.observe(card);
+			}
 
 			// The hint smooth-scrolls to the shelf (instantly under reduced motion).
 			document.querySelector(".scroll-hint")!.addEventListener("click", (e) => {
@@ -234,13 +260,15 @@ const structuredData = {
 			}
 		</script>
 
-		<script is:inline src="/sim/mq_js_bundle.js"></script>
+		<!-- Deferred so it never holds up first paint; the page script below
+		     runs once it has (DOMContentLoaded fires after deferred scripts). -->
+		<script is:inline defer src="/sim/mq_js_bundle.js"></script>
 		<script is:inline>
 		// Wrapped in a function so these names can't collide with
 		// mq_js_bundle.js's top-level globals (it already declares `canvas`).
 		// A function, not a bare block: iOS 17 Safari mis-scopes async
 		// function declarations inside blocks.
-		(() => {
+		addEventListener("DOMContentLoaded", () => {
 			// macroquad's shim exposes `load(path)` once mq_js_bundle.js has run.
 			// Honor prefers-reduced-motion by skipping the sim entirely.
 			const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1038,7 +1066,7 @@ const structuredData = {
 					{ capture: true, passive: true },
 				);
 			}
-		})();
+		});
 		</script>
 
 		<style is:global>
