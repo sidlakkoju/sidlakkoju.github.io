@@ -27,9 +27,12 @@ ex.glass_push(x, y, w, h, radius, alpha, style); // CSS px, viewport space
   (reveal, hover, press, bob), so no layout is read per frame.
 - `html.sim-glass` is set once the renderer is drawing. Under it, the shelf's
   HTML drops its own blur, fill, and shadow.
-- While the page scrolls (`html.scrolling`), canvas content trails native
-  scrolling, so the HTML headline and a CSS glass layer (`[data-glass]::before`)
-  stand in. The renderer's copies return when scrolling settles.
+- Canvas content trails native scrolling, so while the page scrolls the HTML
+  headline stands in for the renderer's copy until scrolling settles. The
+  shelf and the scroll pill don't scroll natively under `html.sim-glass`: they
+  are fixed and the page script moves them from `scrollY` in the same frame as
+  their glass, so the glass stays liquid while scrolling and their content
+  stays on it (including iOS rubber-banding).
 
 ## Elsewhere: `data-glass`
 

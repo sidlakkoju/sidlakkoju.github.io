@@ -11,7 +11,7 @@
 
 ## Pages and shared styles
 - `site/src/layouts/BaseLayout.astro` owns the `<head>` (SEO, OG, icons, JSON-LD); pages add extras through its `head` slot. Liquid Glass tokens (`--lg-*`) and glass/button classes live in `site/src/styles/liquid-glass.css`. Don't name new classes `.glass`: on the homepage that class marks shapes the renderer draws.
-- The homepage scrolls over the fixed sim canvas. macroquad's canvas listeners `preventDefault` wheel, touch, and some keys, so the page script stops those in the capture phase unless the sim needs them (touches that `grab_at` a body while paused). The headline the renderer draws follows the scroll through `ui_offset` / `ui_alpha`.
+- The homepage scrolls over the fixed sim canvas. macroquad's canvas listeners `preventDefault` wheel, touch, and some keys, so the page script stops those in the capture phase unless the sim needs them (touches that `grab_at` a body while paused). The headline the renderer draws follows the scroll through `ui_offset` / `ui_alpha`. The projects shelf and the scroll pill are `position: fixed` once the renderer draws their glass (`html.sim-glass`); the page script moves them from `scrollY` in the same frame as their glass, so the glass never hands off to CSS while scrolling and content can't drift off it (iOS momentum, rubber-banding). Don't make them scroll natively again.
 - Photos Swipe page copy, including every "How it works" diagram claim, lives in `site/src/data/photos-swipe.ts`. The live demo is a static build in `site/public/photos-swipe/demo/`; its postMessage contract is documented in `site/src/components/LiveDemo.astro`.
 
 ## Photos Swipe demo and project page
