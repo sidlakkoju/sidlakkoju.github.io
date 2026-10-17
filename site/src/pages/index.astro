@@ -249,7 +249,13 @@ const structuredData = {
 
 			// Browsers without scroll-driven animations (Safari) reveal the shelf
 			// with a staggered transition when it scrolls into view.
-			if (!reduce && !CSS.supports("animation-timeline: view()") && "IntersectionObserver" in window) {
+			// Touch devices always take this path too: a scroll-driven reveal is
+			// tied to the scroll position, and WebKit may resolve it on the main
+			// thread, where it trails native 120Hz scrolling. A one-off transition
+			// leaves nothing tied to the scroll once the cards are in.
+			const coarse = window.matchMedia("(pointer: coarse)").matches;
+			if (coarse) document.documentElement.classList.add("touch-scroll");
+			if (!reduce && (coarse || !CSS.supports("animation-timeline: view()")) && "IntersectionObserver" in window) {
 				shelf.classList.add("io-reveal");
 				new IntersectionObserver(
 					(entries, io) => {
@@ -785,7 +791,7 @@ const structuredData = {
 			function applyShelf(now) {
 				const vh = viewportH;
 				if (!touchScroll) setStyle(shelfContent, "transform", `translate3d(0, ${layout.shelfY - scrollY}px, 0)`);
-				const timed = touchScroll && !viewTimeline;
+				const timed = touchScroll;
 				for (const r of layout.reveal) {
 					const d = vh - (r.y - scrollY);
 					const start = r.i * 0.04 * r.h;
@@ -871,8 +877,13 @@ const structuredData = {
 				setScrolling(true);
 				if (live && layout) applyAnimations(window.wasm_exports, performance.now());
 			}
+			// The shelf's reveal is a CSS transition (.io-reveal) on touch. Settling
+			// measures, and measuring turns transitions off, which would snap cards
+			// still rising, so stay native until the reveal has played out.
+			const REVEAL_MS = 900 + Math.max(0, ...revealEls.map((el) => parseFloat(el.style.getPropertyValue("--i")) || 0)) * 60;
+			let revealDoneAt = 0;
 			function settleNative(now) {
-				if (!nativeMode || touchActive || now - lastScrollEvent < NATIVE_SETTLE_MS) return;
+				if (!nativeMode || touchActive || now - lastScrollEvent < NATIVE_SETTLE_MS || now < revealDoneAt) return;
 				if (scrollY < 0 || scrollY > layout.maxScroll + 1) return;
 				nativeMode = false;
 				setClass("scroll-native", false);
@@ -887,9 +898,13 @@ const structuredData = {
 			// moved without a window resize: the safe-area insets change as iOS
 			// Safari's toolbars collapse and expand, and pinch zoom moves the
 			// visual viewport. Their drawn glass would otherwise stay behind.
+			// On touch these fire constantly while the page scrolls (the
+			// toolbars animate), and measuring forces layout and briefly turns off
+			// the shelf's transforms, so wait until the page is still: settleNative
+			// measures once then.
 			let measureQueued = false;
 			function scheduleMeasure() {
-				if (measureQueued || !layout) return;
+				if (measureQueued || !layout || (touchScroll && nativeMode)) return;
 				measureQueued = true;
 				requestAnimationFrame(() => {
 					measureQueued = false;
@@ -918,8 +933,12 @@ const structuredData = {
 					onScrollMoved();
 				}
 				if (touchScroll) {
+					const revealTo = !shelf.classList.contains("io-reveal") || shelf.classList.contains("in-view") ? 1 : 0;
+					if (revealTo !== springs.shelfReveal.to) {
+						springs.shelfReveal.to = revealTo;
+						if (revealTo) revealDoneAt = now + REVEAL_MS;
+					}
 					settleNative(now);
-					springs.shelfReveal.to = viewTimeline || !shelf.classList.contains("io-reveal") || shelf.classList.contains("in-view") ? 1 : 0;
 				} else {
 					const isScrolling = now - lastScrollEvent < SCROLL_SETTLE_MS;
 					if (isScrolling !== scrolling) setScrolling(isScrolling);
@@ -1932,7 +1951,7 @@ const structuredData = {
 			}
 			@media (prefers-reduced-motion: no-preference) {
 				@supports (animation-timeline: view()) {
-					.shelf .reveal {
+					html:not(.touch-scroll) .shelf .reveal {
 						animation: shelf-rise linear both;
 						animation-timeline: view();
 						/* Staggered by shifting each item's range a little. */
