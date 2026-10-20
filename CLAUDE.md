@@ -3,6 +3,10 @@
 ## Copy
 - Avoid using the "—" (em dash) character in any UI copy (page text, meta tags, alt text, labels). Use a period, comma, colon, or hyphen instead.
 
+## Code comments
+- Don't add comments to code, either on their own line or after a statement. This covers every language here (JS/TS, Astro, CSS, HTML, Rust, shaders) and overrides any habit of matching the surrounding comment density.
+- Leave existing comments alone, but if a change makes one wrong, delete it rather than rewrite it.
+
 ## Architecture
 - The glass UI and the glass-bead planets are drawn by the Rust renderer (`gravity_simulation/src/glass.rs`), not CSS. HTML elements marked `.glass` only supply content, layout, and hit areas.
 - Performance: the page script never reads layout or computed styles per frame. Layout is measured once (and on resize), UI animations are JS springs, and the renderer/DOM are written only when values change. Keep it that way.
