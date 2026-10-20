@@ -73,10 +73,10 @@ const structuredData = {
 		<script is:inline>
 			if (!matchMedia("(prefers-reduced-motion: reduce)").matches) window.mq_wasm_fetch = fetch("/sim/gravity_simulation.wasm");
 		</script>
-		<!-- Prefetch the project pages so opening one is instant: browsers with
-		     speculation rules fetch on hover or press; the others get the page
-		     script's fallback. -->
-		<script is:inline type="speculationrules" set:html={JSON.stringify({ prefetch: [{ urls: projects.map((p) => p.href), eagerness: "moderate" }] })} />
+		<!-- Make opening a project page instant: browsers with speculation
+		     rules fetch its HTML right away (it's small) and prerender the whole
+		     page on hover or press; the others get the page script's fallback. -->
+		<script is:inline type="speculationrules" set:html={JSON.stringify({ prefetch: [{ urls: projects.map((p) => p.href), eagerness: "eager" }], prerender: [{ urls: projects.map((p) => p.href), eagerness: "moderate" }] })} />
 		<!-- A project card's icon morphs into the project page's icon (and back)
 		     only while it's on screen; otherwise the pages just crossfade. -->
 		<script is:inline>
@@ -247,15 +247,12 @@ const structuredData = {
 				shelf.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "end" });
 			});
 
-			// Browsers without scroll-driven animations (Safari) reveal the shelf
-			// with a staggered transition when it scrolls into view.
-			// Touch devices always take this path too: a scroll-driven reveal is
-			// tied to the scroll position, and WebKit may resolve it on the main
-			// thread, where it trails native 120Hz scrolling. A one-off transition
-			// leaves nothing tied to the scroll once the cards are in.
-			const coarse = window.matchMedia("(pointer: coarse)").matches;
-			if (coarse) document.documentElement.classList.add("touch-scroll");
-			if (!reduce && (coarse || !CSS.supports("animation-timeline: view()")) && "IntersectionObserver" in window) {
+			// The shelf rises in with a staggered, one-off transition when it
+			// scrolls into view. Not a scroll-driven animation: that's tied to the
+			// scroll position, and WebKit may resolve it on the main thread, where
+			// it trails native 120Hz scrolling. A transition leaves nothing tied to
+			// the scroll once the cards are in.
+			if (!reduce && "IntersectionObserver" in window) {
 				shelf.classList.add("io-reveal");
 				new IntersectionObserver(
 					(entries, io) => {
@@ -311,7 +308,6 @@ const structuredData = {
 			const bodyControls = document.getElementById("body-controls");
 			const template = document.getElementById("body-ctl-template");
 			const shelf = document.getElementById("projects");
-			const shelfContent = shelf.querySelector(".shelf-content");
 			const hint = document.querySelector(".scroll-hint");
 			const revealEls = [...shelf.querySelectorAll(".reveal")];
 			const cardEls = [...shelf.querySelectorAll(".project-card")];
@@ -336,37 +332,30 @@ const structuredData = {
 			let glassOn = false; // the renderer draws the shelf's glass
 
 			// ---- Page scroll ----------------------------------------------------
-			// The canvas is fixed; the page scrolls over it. While it does, the
-			// headline the renderer draws fades and drifts up a bit faster than
-			// the content (no drift or fade under reduced motion).
-			//
-			// Anything the canvas draws lags native scrolling by a frame or more
-			// (iOS momentum scrolling especially), so while the page is
-			// actively scrolling the HTML headline stands in for the canvas
-			// copy, and hands back once scrolling settles. The shelf and the
-			// scroll pill go the other way: they're fixed, and moved here in
-			// the same frame as their glass (see applyShelf), so the glass
-			// stays liquid while scrolling and their content stays on it, even
-			// through a rubber-band bounce.
+			// The canvas is fixed; the page scrolls over it, natively, at the
+			// display's full rate on every device (see "Native scrolling"
+			// below). Nothing that moves with the page is positioned from
+			// script: Safari runs page animation at 60fps at most while it
+			// scrolls at 120Hz, and anything script places trails the scroll by
+			// a frame, which shows most in a rubber-band bounce. While the page
+			// scrolls, the headline the renderer draws fades out (not under
+			// reduced motion).
 			let scrollY = window.scrollY;
 			let viewportH = window.innerHeight;
 			let lastScrollEvent = -Infinity;
-			let scrolling = false;
-			const SCROLL_SETTLE_MS = 180;
-			// Touch devices scroll natively instead (see "Touch scrolling"
-			// below): iOS Safari runs page animation at 60fps at most while it
-			// scrolls at the display's 120Hz, so nothing that moves with the page
-			// may be positioned from script there.
-			const touchScroll = matchMedia("(pointer: coarse)").matches;
-			const viewTimeline = CSS.supports("animation-timeline: view()");
+			const coarse = matchMedia("(pointer: coarse)").matches;
 			let touchActive = false;
 			let nativeMode = false;
 			const NATIVE_SETTLE_MS = 300;
-			if (touchScroll) root.classList.add("touch-scroll");
-			// No parallax drift on touch: it would have to be written every frame.
-			const DRIFT = touchScroll ? 0 : 0.35; // extra upward drift per px scrolled
+			// A wheel past the top or bottom stretches the page (Chrome's elastic
+			// overscroll moves the content but not the fixed canvas, and fires no
+			// scroll events), and the stretch eases back for most of a second
+			// after the last wheel event. Handing the headline or the shelf's
+			// glass back to the canvas before then would snap them to rest
+			// mid-bounce.
+			let edgeWheelAt = -Infinity;
+			const EDGE_SETTLE_MS = 1000;
 			const FADE_OVER = 0.5; // fully faded after half a screen
-			const heroDrift = () => (reduce ? 0 : -DRIFT * scrollY);
 			const heroFade = () => (reduce ? 1 : 1 - clamp01(scrollY / (viewportH * FADE_OVER)));
 			// The info card belongs to the first screen; scrolling away hides it.
 			const cardWanted = () => paused && scrollY < viewportH * 0.25;
@@ -385,9 +374,8 @@ const structuredData = {
 				pressAdd: spring(),
 				pressHint: spring(),
 				hint: spring(hintWanted() ? 1 : 0),
-				// Touch: how much of the shelf's glass the renderer draws (0
-				// while the page scrolls natively and CSS glass stands in), and
-				// the time-based reveal where scroll-driven animations are missing.
+				// How much of the shelf's glass the renderer draws (0 while the
+				// page scrolls and CSS glass stands in), and the shelf's reveal.
 				glassMix: spring(1),
 				shelfReveal: spring(0),
 				icons: iconLinks.map(() => spring()),
@@ -457,13 +445,11 @@ const structuredData = {
 					tagline: docRect(tagline),
 					nav: docRect(nav),
 					icons: iconLinks.map((a) => docRect(a.querySelector("svg"))),
-					// The shelf rises in (opacity + translate) as it scrolls into
-					// view; the page drives that so the glass can follow it exactly.
-					reveal: revealEls.map((el) => ({ el, i: parseFloat(el.style.getPropertyValue("--i")) || 0, ...docRect(el), p: -1 })),
+					// The shelf rises in (opacity + translate) once, when it
+					// scrolls into view; the glass follows that reveal at rest.
+					reveal: revealEls.map((el) => ({ el, ...docRect(el), p: -1 })),
 					hint: docRect(hint),
-					shelfY: docRect(shelfContent).y,
 				};
-				const shelfH = shelfContent.offsetHeight;
 				layout.cards = cardEls.map((el) => ({
 					...docRect(el),
 					radius: parseFloat(getComputedStyle(el).borderTopLeftRadius),
@@ -471,12 +457,11 @@ const structuredData = {
 				}));
 				root.classList.remove("measuring");
 				layout.maxScroll = Math.max(0, document.documentElement.scrollHeight - viewportH);
-				setStyle(shelf, "--shelf-content-h", `${shelfH}px`);
 				// While the card is up, lift the headline just enough to clear it,
 				// but never under the top buttons.
 				const needed = layout.card.y - 20 - (layout.nav.y - sy + layout.nav.h);
 				layout.lift = Math.max(Math.min(0, needed), -(layout.heading.y - sy - 80));
-				for (const el of [infoCard, main, hint, shelfContent, ...revealEls, ...cardEls]) el._styles = null;
+				for (const el of [infoCard, main, hint, ...cardEls]) el._styles = null;
 				dirty = true;
 			}
 
@@ -680,7 +665,7 @@ const structuredData = {
 			let shownBody = null;
 			let heroDom = false;
 
-			function applyAnimations(ex, now) {
+			function applyAnimations(ex) {
 				const L = layout;
 				const card = springs.card.x;
 				const cardOpacity = clamp01(card);
@@ -713,20 +698,21 @@ const structuredData = {
 				// Headline: the HTML copy keeps the hit areas in place (and shows
 				// while scrolling); the renderer draws it otherwise.
 				const lift = L.lift * springs.lift.x;
-				const drift = heroDrift();
 				const fade = heroFade();
 				setStyle(main, "--hero-shift", `${lift}px`);
-				setStyle(main, "--hero-drift", `${drift}px`);
 				setStyle(main, "--hero-fade", fade.toFixed(3));
-				const dom = scrolling && fade > 0;
+				const dom = nativeMode && fade > 0;
 				if (dom !== heroDom) {
 					heroDom = dom;
 					setClass("hero-dom", dom);
 				}
 				// Layout is in document coordinates; the renderer draws in viewport ones.
-				const heroY = lift + drift - scrollY;
+				const heroY = lift - scrollY;
 				const heroAlpha = heroDom ? 0 : fade;
-				if (heroY !== sent.heroY || heroAlpha !== sent.heroAlpha) {
+				// While the drawn headline is hidden (the page is scrolling, or it
+				// has faded out), moving it would only make the sim redraw.
+				const heroHidden = heroAlpha === 0 && sent.heroAlpha === 0;
+				if (!heroHidden && (heroY !== sent.heroY || heroAlpha !== sent.heroAlpha)) {
 					sent.heroY = heroY;
 					sent.heroAlpha = heroAlpha;
 					ex.ui_offset(0, 0, heroY);
@@ -737,7 +723,7 @@ const structuredData = {
 					const scale = 1 + 0.15 * s.x;
 					const alpha = (0.8 + 0.2 * clamp01(s.x)) * heroAlpha;
 					const last = sent.icons[i];
-					if (scale === last[0] && (alpha === last[1]) && heroY === last[2]) return;
+					if ((alpha === 0 && last[1] === 0) || (scale === last[0] && alpha === last[1] && heroY === last[2])) return;
 					last[0] = scale;
 					last[1] = alpha;
 					last[2] = heroY;
@@ -757,52 +743,39 @@ const structuredData = {
 				// (clear). The renderer keeps that order per style.
 				shapeCount = 0;
 				pushShape(L.card.x, L.card.y + cardY, L.card.w, L.card.h, L.cardRadius, cardScale, cardOpacity, 1, 1);
-				if (glassOn) applyShelf(now);
+				if (glassOn) applyShelf();
 				pushShape(L.add.x, L.add.y, L.add.w, L.add.h, L.add.w / 2, addScale, clamp01(add), 0);
 				pushShape(L.pause.x, L.pause.y, L.pause.w, L.pause.h, L.pause.w / 2, pauseScale, 1, 0);
 				if (glassOn) {
-					// The scroll pill bobs (as its CSS animation did) and fades out
-					// once the page scrolls or the sim pauses. On touch it rests
-					// while the page scrolls natively.
+					// The scroll pill bobs and fades out once the page scrolls or
+					// the sim pauses. Its glass follows the bob (see startBob). The
+					// bob holds still while the page scrolls, and while hidden.
 					const h = clamp01(springs.hint.x);
-					const still = touchScroll && nativeMode;
-					const bob = h > 0.002 && !still ? (-5 * (1 - Math.cos((2 * Math.PI * now) / 2600))) / 2 : 0;
+					const shown = h > 0.002;
+					const bobbing = shown && !nativeMode;
+					if (bobbing !== bobPlaying) {
+						bobPlaying = bobbing;
+						if (bobbing) bobAnim.play();
+						else bobAnim.pause();
+					}
+					const bob = bobNow();
 					const hintScale = 1 - 0.06 * springs.pressHint.x;
 					const r = L.hint;
 					setStyle(hint, "opacity", String(h));
-					setStyle(hint, "visibility", h > 0.002 ? "visible" : "hidden");
-					// Fixed (or, on touch, in the page): placed in step with its glass.
-					setStyle(hint, "translate", touchScroll ? (still ? "" : `0 ${bob.toFixed(2)}px`) : `0 ${(r.y + bob - scrollY).toFixed(2)}px`);
+					setStyle(hint, "visibility", shown ? "visible" : "hidden");
 					setStyle(hint, "scale", hintScale === 1 ? "" : hintScale.toFixed(4));
 					pushShape(r.x, r.y + bob - scrollY, r.w, r.h, r.h / 2, hintScale, h * glassMix(), 0);
 				}
 				flushShapes(ex);
 			}
 
-			// The shelf: reveal progress follows the CSS view() timeline it
-			// replaces (`entry i*4%` to `cover 30% + i*4%`, linear), and each
-			// project card is frosted glass that moves, fades, and scales with it.
-			// The shelf itself is fixed and placed here from the same scroll
-			// position as the glass, so the two never drift apart.
-			//
-			// On touch the shelf stays in the page and scrolls natively; its
-			// reveal is CSS (scroll-driven, or the time-based fallback), and the
-			// glass only follows it here while the page is at rest.
-			function applyShelf(now) {
-				const vh = viewportH;
-				if (!touchScroll) setStyle(shelfContent, "transform", `translate3d(0, ${layout.shelfY - scrollY}px, 0)`);
-				const timed = touchScroll;
-				for (const r of layout.reveal) {
-					const d = vh - (r.y - scrollY);
-					const start = r.i * 0.04 * r.h;
-					const end = (0.3 + r.i * 0.04) * (vh + r.h);
-					const p = timed ? clamp01(springs.shelfReveal.x) : clamp01((d - start) / (end - start));
-					if (p === r.p) continue;
-					r.p = p;
-					if (touchScroll) continue;
-					setStyle(r.el, "opacity", p === 1 ? "" : String(p));
-					setStyle(r.el, "transform", p === 1 ? "" : `translateY(${48 * (1 - p)}px)`);
-				}
+			// The shelf: each project card is frosted glass drawn where the card
+			// sits at rest. The shelf scrolls natively and its reveal is a CSS
+			// transition (.io-reveal); the glass only follows it here while the
+			// page is at rest, and fades along with the reveal.
+			function applyShelf() {
+				const p = clamp01(springs.shelfReveal.x);
+				for (const r of layout.reveal) r.p = p;
 				const mix = glassMix();
 				layout.cards.forEach((c, i) => {
 					const hover = springs.cardHover[i].x;
@@ -814,6 +787,21 @@ const structuredData = {
 					pushShape(c.x, y, c.w, c.h, c.radius, scale, p * mix, 1);
 				});
 			}
+
+			// The pill's bob runs on the compositor (a Web Animation, so it costs
+			// no style writes and keeps going if the main thread is busy). It's a
+			// raised cosine sampled finely enough that linear steps match it, and
+			// the glass reads the same animation clock, so the two move together.
+			const BOB_MS = 2600;
+			const bobAt = (t) => (-5 * (1 - Math.cos((2 * Math.PI * t) / BOB_MS))) / 2;
+			let bobAnim = null;
+			let bobPlaying = true;
+			function startBob() {
+				const frames = [];
+				for (let i = 0; i <= 32; i++) frames.push({ translate: `0 ${bobAt((i / 32) * BOB_MS).toFixed(3)}px` });
+				bobAnim = hint.animate(frames, { duration: BOB_MS, iterations: Infinity });
+			}
+			const bobNow = () => bobAt(Number(bobAnim.currentTime) % BOB_MS || 0);
 
 			// Body controls only need work while visible, and only for bodies
 			// that moved (when paused, that's at most the one being dragged).
@@ -856,42 +844,42 @@ const structuredData = {
 			let lastRendered = false;
 			const stats = { rendered: 0, skipped: 0 };
 
-			function setScrolling(on) {
-				scrolling = on;
-				dirty = true;
-			}
-
-			// ---- Touch scrolling ------------------------------------------------
-			// From the first touch (or scroll) until the page has been still for
-			// a moment, everything that moves with it scrolls natively at the
-			// display's rate: the HTML headline stands in for the drawn one, and
-			// the shelf and pill wear CSS glass while the renderer's fades out.
-			// Once still, the renderer's glass fades back in where they are.
-			const glassMix = () => (touchScroll ? clamp01(springs.glassMix.x) : 1);
+			// ---- Native scrolling -----------------------------------------------
+			// From the first touch, wheel, or scroll until the page has been
+			// still for a moment, everything that moves with it scrolls natively
+			// at the display's rate, rubber-band bounce included: the HTML
+			// headline stands in for the drawn one, and the shelf and pill wear
+			// CSS glass while the renderer's is off (it would trail the scroll by
+			// a frame). Once still, the renderer's glass fades back in where they
+			// are.
+			const glassMix = () => clamp01(springs.glassMix.x);
 			function enterNative() {
-				if (!touchScroll || nativeMode) return;
+				if (nativeMode) return;
 				nativeMode = true;
 				setClass("scroll-native", true);
 				const g = springs.glassMix;
 				g.x = g.to = g.v = 0;
-				setScrolling(true);
-				if (live && layout) applyAnimations(window.wasm_exports, performance.now());
+				dirty = true;
+				if (live && layout) applyAnimations(window.wasm_exports);
 			}
-			// The shelf's reveal is a CSS transition (.io-reveal) on touch. Settling
-			// measures, and measuring turns transitions off, which would snap cards
-			// still rising, so stay native until the reveal has played out.
+			// The shelf's reveal is a CSS transition (.io-reveal). Settling may
+			// measure, and measuring turns transitions off, which would snap
+			// cards still rising, so stay native until the reveal has played out.
 			const REVEAL_MS = 900 + Math.max(0, ...revealEls.map((el) => parseFloat(el.style.getPropertyValue("--i")) || 0)) * 60;
 			let revealDoneAt = 0;
 			function settleNative(now) {
-				if (!nativeMode || touchActive || now - lastScrollEvent < NATIVE_SETTLE_MS || now < revealDoneAt) return;
+				if (!nativeMode || touchActive || now - lastScrollEvent < NATIVE_SETTLE_MS || now - edgeWheelAt < EDGE_SETTLE_MS || now < revealDoneAt) return;
 				if (scrollY < 0 || scrollY > layout.maxScroll + 1) return;
 				nativeMode = false;
 				setClass("scroll-native", false);
 				springs.glassMix.to = 1;
-				setScrolling(false);
+				dirty = true;
+				// Card hover is ignored while the page moves; pick it up where the
+				// mouse came to rest.
+				if (!coarse) cardEls.forEach((el, i) => (springs.cardHover[i].to = el.matches(":hover") ? 1 : 0));
 				// Safari's toolbars come and go while the page scrolls, and with
 				// them the safe area the fixed buttons sit against.
-				scheduleMeasure();
+				if (coarse) scheduleMeasure();
 			}
 
 			// Re-measure once (not per frame) when the fixed controls may have
@@ -904,7 +892,7 @@ const structuredData = {
 			// measures once then.
 			let measureQueued = false;
 			function scheduleMeasure() {
-				if (measureQueued || !layout || (touchScroll && nativeMode)) return;
+				if (measureQueued || !layout || nativeMode) return;
 				measureQueued = true;
 				requestAnimationFrame(() => {
 					measureQueued = false;
@@ -932,28 +920,23 @@ const structuredData = {
 					scrollY = sy;
 					onScrollMoved();
 				}
-				if (touchScroll) {
-					const revealTo = !shelf.classList.contains("io-reveal") || shelf.classList.contains("in-view") ? 1 : 0;
-					if (revealTo !== springs.shelfReveal.to) {
-						springs.shelfReveal.to = revealTo;
-						if (revealTo) revealDoneAt = now + REVEAL_MS;
-					}
-					settleNative(now);
-				} else {
-					const isScrolling = now - lastScrollEvent < SCROLL_SETTLE_MS;
-					if (isScrolling !== scrolling) setScrolling(isScrolling);
+				const revealTo = !shelf.classList.contains("io-reveal") || shelf.classList.contains("in-view") ? 1 : 0;
+				if (revealTo !== springs.shelfReveal.to) {
+					springs.shelfReveal.to = revealTo;
+					if (revealTo) revealDoneAt = now + REVEAL_MS;
 				}
+				settleNative(now);
 
 				const p = ex.is_paused() !== 0;
 				if (p !== paused) setPaused(p);
 
 				let moving = false;
 				for (const s of SPRINGS) moving = step(s, dt) || moving;
-				// The pill's bob is a continuous animation while it's shown.
-				if (glassOn && springs.hint.x > 0.002) moving = true;
+				// The pill's glass follows its bob while both are shown.
+				if (glassOn && springs.hint.x > 0.002 && glassMix() > 0) moving = true;
 				if (moving || dirty) {
 					dirty = false;
-					applyAnimations(ex, now);
+					applyAnimations(ex);
 				}
 
 				// Decide whether the sim draws this frame.
@@ -961,11 +944,11 @@ const structuredData = {
 				if (pendingFrames > 0) pendingFrames--;
 				else if (paused) render = pointerDown;
 				// Touch scrolling: the renderer draws nothing that moves with the
-				// page, so planets at half rate leave the GPU to the scroll.
-				else if (touchScroll && nativeMode) render = frameNo % 2 === 0;
+				// page, so planets at half rate leave the phone's GPU to the scroll.
+				else if (coarse && nativeMode) render = frameNo % 2 === 0;
 				// Hero scrolled away and nothing touched: half rate is plenty for
 				// planets drifting behind the shelf.
-				else if (!scrolling && !pointerDown && heroFade() === 0) render = frameNo % 2 === 0;
+				else if (!nativeMode && !pointerDown && heroFade() === 0) render = frameNo % 2 === 0;
 
 				if (render && lastRendered) checkBudget(now, interval);
 				lastRendered = render;
@@ -988,6 +971,9 @@ const structuredData = {
 				measure();
 				rasterizeHeadline(ex);
 				rasterizeIcons(ex);
+				// A fresh upload resets the headline's offset: send it again.
+				sent.heroY = sent.heroAlpha = NaN;
+				for (const last of sent.icons) last[1] = NaN;
 				redraw(2);
 			}
 
@@ -1017,9 +1003,9 @@ const structuredData = {
 				// then on it also draws the shelf's glass.
 				requestAnimationFrame(() =>
 					requestAnimationFrame(() => {
-						// Place the shelf and pill before they turn fixed.
+						startBob();
 						glassOn = true;
-						applyAnimations(window.wasm_exports, performance.now());
+						applyAnimations(window.wasm_exports);
 						root.classList.add("sim-ready", "sim-glass");
 						dirty = true;
 					}),
@@ -1051,18 +1037,11 @@ const structuredData = {
 				a.addEventListener("pointerenter", (e) => e.pointerType === "mouse" && (springs.icons[i].to = 1));
 				a.addEventListener("pointerleave", () => (springs.icons[i].to = 0));
 			});
-			// A focused card is fixed, so the browser won't scroll to it: bring
-			// it on screen the way focus would.
-			shelf.addEventListener("focusin", (e) => {
-				const i = cardEls.indexOf(e.target.closest(".project-card"));
-				if (!glassOn || i < 0) return;
-				const c = layout.cards[i];
-				if (c.y - scrollY < 0 || c.y + c.h - scrollY > viewportH) window.scrollTo(0, c.y + c.h / 2 - viewportH / 2);
-			});
-
-			// Project cards: hover lifts, press squishes; the glass follows.
+			// Project cards: hover lifts, press squishes; the glass follows. Not
+			// while the page scrolls under a resting mouse: that would move the
+			// card from script mid-scroll.
 			cardEls.forEach((el, i) => {
-				el.addEventListener("pointerenter", (e) => e.pointerType === "mouse" && (springs.cardHover[i].to = 1));
+				el.addEventListener("pointerenter", (e) => e.pointerType === "mouse" && !nativeMode && (springs.cardHover[i].to = 1));
 				el.addEventListener("pointerleave", () => (springs.cardHover[i].to = springs.cardPress[i].to = 0));
 				el.addEventListener("pointerdown", () => (springs.cardPress[i].to = 1));
 				for (const type of ["pointerup", "pointercancel"]) el.addEventListener(type, () => (springs.cardPress[i].to = 0));
@@ -1101,11 +1080,12 @@ const structuredData = {
 
 			// ---- Scrolling over the sim ------------------------------------
 			// The page scrolls, but macroquad's canvas listeners call
-			// preventDefault on wheel, touch, and some keys, which would block
-			// it. The sim never uses the wheel or these keys, and only uses
-			// touches that land on a body (or its velocity handle) while
-			// paused, so everything else is stopped in the capture phase
-			// before it reaches the canvas and the browser scrolls as usual.
+			// preventDefault on touch and some keys, which would block it.
+			// The sim never uses these keys, and only uses touches that land
+			// on a body (or its velocity handle) while paused, so everything
+			// else is stopped in the capture phase before it reaches the
+			// canvas and the browser scrolls as usual. (The bundle registers
+			// no wheel listener: the sim never used the wheel.)
 
 			// Things that depend on the scroll position. Once the sim runs this
 			// is called from the frame hook; before that (or without the sim)
@@ -1116,10 +1096,7 @@ const structuredData = {
 				if (springs.card.to !== card) springs.card.to = springs.lift.to = card;
 				springs.hint.to = hintWanted() ? 1 : 0;
 				dirty = true;
-				if (!live) {
-					setStyle(main, "--hero-drift", `${heroDrift()}px`);
-					setStyle(main, "--hero-fade", heroFade().toFixed(3));
-				}
+				if (!live) setStyle(main, "--hero-fade", heroFade().toFixed(3));
 			}
 			window.addEventListener(
 				"scroll",
@@ -1139,10 +1116,16 @@ const structuredData = {
 			});
 			onScrollMoved();
 
+			// Wheel and trackpad: hand over before the page moves. A wheel at the
+			// top or bottom may only stretch the page (Chrome fires no scroll
+			// events for that), so it counts as scrolling too.
 			window.addEventListener(
 				"wheel",
 				(e) => {
-					if (e.target === canvas) e.stopPropagation();
+					lastScrollEvent = performance.now();
+					// scrollY is the last frame's: reading it here could force layout.
+					if ((e.deltaY < 0 && scrollY <= 0) || (e.deltaY > 0 && layout && scrollY >= layout.maxScroll - 1)) edgeWheelAt = lastScrollEvent;
+					enterNative();
 				},
 				{ capture: true, passive: true },
 			);
@@ -1158,25 +1141,23 @@ const structuredData = {
 
 			// Touch: hand the shelf and headline to native scrolling before the
 			// page moves, and keep them there until fingers lift and it settles.
-			if (touchScroll) {
+			window.addEventListener(
+				"touchstart",
+				(e) => {
+					touchActive = e.touches.length > 0;
+					if (!(paused && e.target === canvas)) enterNative();
+				},
+				{ capture: true, passive: true },
+			);
+			for (const type of ["touchend", "touchcancel"]) {
 				window.addEventListener(
-					"touchstart",
+					type,
 					(e) => {
 						touchActive = e.touches.length > 0;
-						if (!(paused && e.target === canvas)) enterNative();
+						lastScrollEvent = Math.max(lastScrollEvent, performance.now());
 					},
 					{ capture: true, passive: true },
 				);
-				for (const type of ["touchend", "touchcancel"]) {
-					window.addEventListener(
-						type,
-						(e) => {
-							touchActive = e.touches.length > 0;
-							lastScrollEvent = Math.max(lastScrollEvent, performance.now());
-						},
-						{ capture: true, passive: true },
-					);
-				}
 			}
 
 			// The canvas only takes input while the sim is paused (CSS), so
@@ -1309,10 +1290,10 @@ const structuredData = {
 			}
 
 			/* Lifted by the page script (a spring) while the info card is up, and
-			   drifted/faded as the page scrolls. Once the sim runs it draws the
+			   faded as the page scrolls. Once the sim runs it draws the
 			   headline itself, so these mostly keep the hit areas in place. */
 			main > * {
-				transform: translateY(calc(var(--hero-shift, 0px) + var(--hero-drift, 0px)));
+				transform: translateY(var(--hero-shift, 0px));
 			}
 			main {
 				opacity: var(--hero-fade, 1);
@@ -1483,45 +1464,18 @@ const structuredData = {
 					background-color: rgba(255, 255, 255, 0.05);
 				}
 			}
-			html.sim-glass:not(.touch-scroll) .shelf .reveal {
-				opacity: 1;
-				transform: none;
-				animation: none;
-				transition: none;
-			}
 			html.sim-glass .scroll-hint {
 				animation: none;
 				transition: none;
 			}
 			/* The renderer's glass is drawn from the scroll position the page
-			   script reads each frame, which trails native scrolling (iOS momentum
-			   and rubber-banding most of all). So the shelf and the pill don't
-			   scroll natively: they're fixed, and the script moves them in the
-			   same frame as their glass, so the glass never has to hand off to a
-			   frosted CSS copy and their content never leaves it. The ::before
-			   keeps the shelf's place in the page. */
-			html.sim-glass:not(.measuring):not(.touch-scroll) .shelf::before {
-				content: "";
-				display: block;
-				height: var(--shelf-content-h, 0px);
-			}
-			html.sim-glass:not(.measuring):not(.touch-scroll) .shelf-content {
-				position: fixed;
-				top: 0;
-				left: 0;
-				right: 0;
-			}
-			html.sim-glass:not(.measuring):not(.touch-scroll) .scroll-hint {
-				position: fixed;
-				top: 0;
-			}
-
-			/* Touch devices: the shelf and pill stay in the page and scroll
-			   natively (the display's full rate). While the page moves they wear
-			   CSS glass; once it rests, the renderer's glass fades back in under
-			   them and this fades out. */
-			html.sim-glass.touch-scroll .project-card::before,
-			html.sim-glass.touch-scroll .scroll-hint::before {
+			   script reads each frame, which trails native scrolling (momentum and
+			   rubber-banding most of all). So the shelf and pill scroll natively
+			   at the display's full rate and wear CSS glass while the page moves;
+			   once it rests, the renderer's glass fades back in under them and
+			   this fades out. */
+			html.sim-glass .project-card::before,
+			html.sim-glass .scroll-hint::before {
 				content: "";
 				position: absolute;
 				inset: 0;
@@ -1535,17 +1489,14 @@ const structuredData = {
 				transition: opacity 0.3s ease;
 				pointer-events: none;
 			}
-			html.sim-glass.touch-scroll .scroll-hint::before {
+			html.sim-glass .scroll-hint::before {
 				-webkit-backdrop-filter: blur(6px) saturate(180%);
 				backdrop-filter: blur(6px) saturate(180%);
 			}
-			html.sim-glass.touch-scroll.scroll-native .project-card::before,
-			html.sim-glass.touch-scroll.scroll-native .scroll-hint::before {
+			html.sim-glass.scroll-native .project-card::before,
+			html.sim-glass.scroll-native .scroll-hint::before {
 				opacity: 1;
 				transition: none;
-			}
-			.measuring .shelf-content {
-				transform: none !important;
 			}
 
 			/* Sized by the safe-area insets so the page script can watch them
@@ -1937,27 +1888,10 @@ const structuredData = {
 				}
 			}
 
-			/* Reveal: rises in as it scrolls into view. Scroll-driven where
-			   supported; otherwise .io-reveal + .in-view (IntersectionObserver). */
-			@keyframes shelf-rise {
-				from {
-					opacity: 0;
-					transform: translateY(48px);
-				}
-				to {
-					opacity: 1;
-					transform: none;
-				}
-			}
+			/* Reveal: rises in once, when it scrolls into view (.io-reveal +
+			   .in-view, from an IntersectionObserver). Never scroll-driven: see
+			   the page script. */
 			@media (prefers-reduced-motion: no-preference) {
-				@supports (animation-timeline: view()) {
-					html:not(.touch-scroll) .shelf .reveal {
-						animation: shelf-rise linear both;
-						animation-timeline: view();
-						/* Staggered by shifting each item's range a little. */
-						animation-range: entry calc(var(--i) * 4%) cover calc(30% + var(--i) * 4%);
-					}
-				}
 				.io-reveal .reveal {
 					opacity: 0;
 					transform: translateY(48px);
