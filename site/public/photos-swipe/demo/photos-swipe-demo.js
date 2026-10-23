@@ -3043,6 +3043,7 @@ $('remove').setAttribute('aria-label',inspected?'Back to review':'Mark for Trash
 .overlay.lifting{overflow:hidden}
 .overlay.lifting>.content{overflow:visible}
 .content #card:not(.expanded)>.top-card.lifted::before{background:linear-gradient(var(--ps-glass-fill),var(--ps-glass-fill)),var(--ps-tint,var(--ps-chrome))}
+.content #card.expanded>.top-card.lifted::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(var(--ps-glass-fill),var(--ps-glass-fill)),var(--ps-tint,var(--ps-chrome));pointer-events:none}
 .content .status{color:var(--ps-label)}
 #enlarge{display:flex;align-items:center;justify-content:center}
 .content #enlarge svg,.content .card-tool svg{width:18px;height:18px;flex:none}
@@ -3334,5 +3335,5 @@ $('remove').setAttribute('aria-label',inspected?'Back to review':'Mark for Trash
 const params=new URLSearchParams(location.search);
 const embed=params.get('embed')==='1';
 if(embed)document.documentElement.dataset.embed='1';
-mountPhotosSwipe(createDemoEnvironment({window,document,location,base:new URL('media/',document.baseURI).href,embed,top:params.get('top'),scheme:params.get('scheme'),version:"1.2.175"}));
+mountPhotosSwipe(createDemoEnvironment({window,document,location,base:new URL('media/',document.baseURI).href,embed,top:params.get('top'),scheme:params.get('scheme'),version:"1.2.176"}));
 })();
