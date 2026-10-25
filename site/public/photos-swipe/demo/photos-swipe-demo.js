@@ -1874,28 +1874,39 @@ function mountPhotosSwipe(environment) {
  mediaElement.setAttribute("id","media");
  const topCard=document.createElement('div');topCard.setAttribute('class','top-card');cardElement.append(topCard);topCard.append(mediaElement);
  const fillCanvas=()=>{const canvas=document.createElement('canvas');canvas.setAttribute('class','card-fill');canvas.setAttribute('aria-hidden','true');return canvas;};
- const cardFill=fillCanvas(),nextFill=fillCanvas(),fillWork=document.createElement('canvas'),fillCopy=document.createElement('canvas'),fillSample=document.createElement('canvas'),fillDot=document.createElement('canvas');topCard.append(cardFill);fillSample.width=16;fillSample.height=1;fillDot.width=fillDot.height=1;
+ const cardFill=fillCanvas(),nextFill=fillCanvas(),fillWork=document.createElement('canvas'),fillCopy=document.createElement('canvas'),fillLayer=document.createElement('canvas'),fillMask=document.createElement('canvas'),fillPing=document.createElement('canvas'),fillPong=document.createElement('canvas');topCard.append(cardFill);
  let fillMode='ambient',fillBox=null,fillFrame=0;cardElement.dataset.fill=fillMode;
  const darkQuery=window.matchMedia?.('(prefers-color-scheme: dark)');let prefersDark=!!darkQuery?.matches;darkQuery?.addEventListener?.('change',event=>{prefersDark=event.matches;paintCardFill(true);nextFill.dataset.key='';paintNextFill();});
  function fillDark(){return host.dataset.scheme?host.dataset.scheme==='dark':prefersDark;}
- function fillAverage(source,sx,sy,sw,sh){const sample=fillSample.getContext('2d'),dot=fillDot.getContext('2d');sample.imageSmoothingEnabled=dot.imageSmoothingEnabled=true;sample.imageSmoothingQuality=dot.imageSmoothingQuality='high';sample.clearRect(0,0,16,1);sample.drawImage(source,sx,sy,sw,sh,0,0,16,1);dot.clearRect(0,0,1,1);dot.drawImage(fillSample,0,0,16,1,0,0,1,1);return fillDot;}
+ function softened(source,width,height,factor){
+  const tw=Math.max(1,Math.round(width/factor)),th=Math.max(1,Math.round(height/factor)),step=(from,fw,fh,to,nw,nh)=>{to.width=nw;to.height=nh;const context=to.getContext('2d');context.imageSmoothingEnabled=true;context.imageSmoothingQuality='high';context.drawImage(from,0,0,fw,fh,0,0,nw,nh);};
+  let from=source,to=fillPing,cw=width,ch=height;
+  while(cw>tw||ch>th){const nw=Math.max(tw,Math.ceil(cw/2)),nh=Math.max(th,Math.ceil(ch/2));step(from,cw,ch,to,nw,nh);from=to;to=from===fillPing?fillPong:fillPing;cw=nw;ch=nh;}
+  while(cw<width||ch<height){const nw=Math.min(width,cw*2),nh=Math.min(height,ch*2);step(from,cw,ch,to,nw,nh);from=to;to=from===fillPing?fillPong:fillPing;cw=nw;ch=nh;}
+  return from;
+ }
  function drawFill(canvas,media){
   const naturalWidth=media.naturalWidth||media.videoWidth,naturalHeight=media.naturalHeight||media.videoHeight;
   if(fillMode==='glass'||!fillBox||!naturalWidth||!naturalHeight){canvas.classList.remove('on');return false;}
   const shrink=Math.min(1,256/Math.max(naturalWidth,naturalHeight)),width=Math.max(1,Math.round(naturalWidth*shrink)),height=Math.max(1,Math.round(naturalHeight*shrink)),copy=fillCopy.getContext('2d');if(!copy)return false;
   fillCopy.width=width;fillCopy.height=height;copy.imageSmoothingEnabled=true;copy.imageSmoothingQuality='high';copy.drawImage(media,0,0,width,height);const source=fillCopy;
-  const long=fillMode==='ambient'?24:192,wide=fillBox.width>=fillBox.height,W=Math.max(1,Math.round(wide?long:long*fillBox.width/fillBox.height)),H=Math.max(1,Math.round(wide?long*fillBox.height/fillBox.width:long)),context=fillWork.getContext('2d'),target=canvas.getContext('2d');if(!context||!target)return false;
-  fillWork.width=W;fillWork.height=H;context.imageSmoothingEnabled=true;context.imageSmoothingQuality='high';
+  const long=fillMode==='ambient'?128:192,wide=fillBox.width>=fillBox.height,W=Math.max(1,Math.round(wide?long:long*fillBox.width/fillBox.height)),H=Math.max(1,Math.round(wide?long*fillBox.height/fillBox.width:long)),context=fillWork.getContext('2d'),target=canvas.getContext('2d'),layer=fillLayer.getContext('2d');if(!context||!target||!layer)return false;
+  const pad=Math.ceil(Math.max(W,H)*.15),PW=W+2*pad,PH=H+2*pad;
+  fillWork.width=W;fillWork.height=H;fillLayer.width=PW;fillLayer.height=PH;layer.imageSmoothingEnabled=context.imageSmoothingEnabled=true;layer.imageSmoothingQuality=context.imageSmoothingQuality='high';
   const scale=Math.min(W/width,H/height),w=width*scale,h=height*scale,x=(W-w)/2,y=(H-h)/2;
-  if(fillMode==='ambient'){const cover=Math.max(W/width,H/height)*1.15,cw=width*cover,ch=height*cover;if('filter' in context)context.filter='blur(2px)';context.drawImage(source,(W-cw)/2,(H-ch)/2,cw,ch);if('filter' in context)context.filter='none';context.fillStyle=fillDark()?'rgba(0,0,0,.18)':'rgba(255,255,255,.14)';context.fillRect(0,0,W,H);}
+  if(fillMode==='ambient'){const cover=Math.max(PW/width,PH/height)*1.15,cw=width*cover,ch=height*cover;layer.drawImage(source,(PW-cw)/2,(PH-ch)/2,cw,ch);context.drawImage(softened(fillLayer,PW,PH,14),pad,pad,W,H,0,0,W,H);context.fillStyle=fillDark()?'rgba(0,0,0,.16)':'rgba(255,255,255,.12)';context.fillRect(0,0,W,H);}
   else{
-   const band=size=>Math.max(1,Math.round(size*.03));
-   if(y>=.5){const bh=band(height);
-    context.drawImage(source,0,0,width,bh,0,0,W,y+.5);const top=fillAverage(source,0,0,width,bh);for(let row=0;row<Math.ceil(y);row++){context.globalAlpha=Math.max(0,1-(row+.5)/y);context.drawImage(top,0,row,W,1);}context.globalAlpha=1;
-    const from=y+h-.5;context.drawImage(source,0,height-bh,width,bh,0,from,W,H-from);const bottom=fillAverage(source,0,height-bh,width,bh);for(let row=Math.floor(y+h);row<H;row++){context.globalAlpha=Math.min(1,(row+.5-(y+h))/(H-(y+h)));context.drawImage(bottom,0,row,W,1);}context.globalAlpha=1;}
-   if(x>=.5){const bw=band(width),blur='filter' in context;if(blur)context.filter=`blur(${Math.max(1,Math.round(H/160))}px)`;context.drawImage(source,0,0,bw,height,0,y,x+.5,h);context.drawImage(source,width-bw,0,bw,height,x+w-.5,y,W-(x+w-.5),h);if(blur)context.filter='none';
-    const left=fillAverage(source,0,0,bw,height),leftEnd=Math.ceil(x);for(let column=0;column<leftEnd;column++){context.globalAlpha=Math.max(0,.5*(1-(column+.5)/x));context.drawImage(left,column,0,1,H);}
-    const right=fillAverage(source,width-bw,0,bw,height);for(let column=Math.floor(x+w);column<W;column++){context.globalAlpha=Math.min(.5,.5*(column+.5-(x+w))/(W-(x+w)));context.drawImage(right,column,0,1,H);}context.globalAlpha=1;}
+   const tall=y>=.5,px=pad+x,py=pad+y,mirror=(at,vertical)=>{layer.save();if(vertical){layer.translate(0,2*at);layer.scale(1,-1);}else{layer.translate(2*at,0);layer.scale(-1,1);}layer.drawImage(source,0,0,width,height,px,py,w,h);layer.restore();};
+   layer.drawImage(source,0,0,width,height,px,py,w,h);
+   if(tall){mirror(py,true);mirror(py+h,true);const top=Math.floor(py-h),bottom=Math.ceil(py+2*h);if(top>0)layer.drawImage(fillLayer,0,top,PW,1,0,0,PW,top);if(bottom<PH)layer.drawImage(fillLayer,0,bottom-1,PW,1,0,bottom,PW,PH-bottom);layer.drawImage(fillLayer,px,0,1,PH,0,0,px,PH);layer.drawImage(fillLayer,px+w-1,0,1,PH,px+w,0,PW-px-w,PH);}
+   else{mirror(px,false);mirror(px+w,false);const left=Math.floor(px-w),right=Math.ceil(px+2*w);if(left>0)layer.drawImage(fillLayer,left,0,1,PH,0,0,left,PH);if(right<PW)layer.drawImage(fillLayer,right-1,0,1,PH,right,0,PW-right,PH);layer.drawImage(fillLayer,0,py,PW,1,0,0,PW,py);layer.drawImage(fillLayer,0,py+h-1,PW,1,0,py+h,PW,PH-py-h);}
+   context.drawImage(softened(fillLayer,PW,PH,2),pad,pad,W,H,0,0,W,H);
+   const near=tall?y:x,far=tall?y+h:x+w,length=tall?H:W,extent=Math.max(1,near),mask=fillMask.getContext('2d'),ramp=(target,from,to,color)=>{const gradient=tall?target.createLinearGradient(0,0,0,H):target.createLinearGradient(0,0,W,0),stop=(at,alpha)=>gradient.addColorStop(Math.min(1,Math.max(0,at/length)),color(alpha));stop(0,1);stop(near-to,1);stop(near-from,0);stop(far+from,0);stop(far+to,1);stop(length,1);return gradient;};
+   [[3,0,.1],[6,.06,.26],[12,.2,.46],[24,.4,.7],[48,.62,1]].forEach(([factor,from,to])=>{
+    fillMask.width=W;fillMask.height=H;mask.drawImage(softened(fillLayer,PW,PH,factor),pad,pad,W,H,0,0,W,H);
+    mask.globalCompositeOperation='destination-in';mask.fillStyle=ramp(mask,extent*from,extent*to,alpha=>`rgba(0,0,0,${alpha})`);mask.fillRect(0,0,W,H);mask.globalCompositeOperation='source-over';context.drawImage(fillMask,0,0);
+   });
+   const tint=fillDark()?'0,0,0':'255,255,255',strength=fillDark()?.2:.16;context.fillStyle=ramp(context,0,extent,alpha=>`rgba(${tint},${alpha*strength})`);context.fillRect(0,0,W,H);
   }
   canvas.width=W;canvas.height=H;target.drawImage(fillWork,0,0);canvas.classList.add('on');return true;
  }
@@ -3383,5 +3394,5 @@ $('remove').setAttribute('aria-label',inspected?'Back to review':'Mark for Trash
 const params=new URLSearchParams(location.search);
 const embed=params.get('embed')==='1';
 if(embed)document.documentElement.dataset.embed='1';
-mountPhotosSwipe(createDemoEnvironment({window,document,location,base:new URL('media/',document.baseURI).href,embed,top:params.get('top'),scheme:params.get('scheme'),version:"1.2.183"}));
+mountPhotosSwipe(createDemoEnvironment({window,document,location,base:new URL('media/',document.baseURI).href,embed,top:params.get('top'),scheme:params.get('scheme'),version:"1.2.184"}));
 })();
