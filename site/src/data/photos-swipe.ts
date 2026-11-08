@@ -165,7 +165,7 @@ export const diagram = {
 		},
 		media: {
 			title: "Google media servers",
-			sub: "googleusercontent.com · previews & video",
+			sub: "googleusercontent & googlevideo · previews, video",
 			subShort: "Previews & video",
 			glyph: "download",
 		},
@@ -222,8 +222,8 @@ export const diagram = {
 			chipShort: "Preview",
 			title: "2 · Preload previews",
 			caption:
-				"Previews for the next few photos load straight from Google's media servers into the tab, so swipes feel instant.",
-			captionShort: "The next few previews load straight from Google's media servers, so swipes feel instant.",
+				"Previews for the next few photos load straight from Google's media servers into the tab, so swipes feel instant. Videos stream in short pieces at up to 1080p, so you can jump to any moment.",
+			captionShort: "The next few previews load straight from Google's media servers, so swipes feel instant. Videos stream at up to 1080p and scrub anywhere.",
 			active: ["userscript", "media"],
 			routes: [{ id: "toMedia", dir: "in" }],
 			labels: ["upcomingPreviews"],
