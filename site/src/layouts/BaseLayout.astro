@@ -3,7 +3,7 @@
 // JSON-LD) and the global Liquid Glass tokens. Pages pass their own copy and
 // add anything page-specific through the "head" slot.
 import "../styles/liquid-glass.css";
-import { name, siteUrl } from "../data/site";
+import { name, searchName, siteUrl } from "../data/site";
 
 interface Icon {
 	rel: string;
@@ -75,7 +75,7 @@ const ogImageUrl = new URL(ogImage, siteUrl).href;
 		<link rel="sitemap" type="application/xml" href="/sitemap.xml" />
 
 		<meta property="og:type" content={ogType} />
-		<meta property="og:site_name" content={name} />
+		<meta property="og:site_name" content={searchName} />
 		<meta property="og:title" content={title} />
 		<meta property="og:description" content={description} />
 		<meta property="og:url" content={url} />
