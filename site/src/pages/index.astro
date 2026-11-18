@@ -2,9 +2,9 @@
 import BaseLayout from "../layouts/BaseLayout.astro";
 import ProjectCard from "../components/ProjectCard.astro";
 import "../styles/liquid-refraction.css";
-import { name, siteUrl, profiles, projects } from "../data/site";
+import { name, searchName, siteUrl, profiles, projects } from "../data/site";
 
-const title = name;
+const title = searchName;
 const description =
 	"Sid Lakkoju is an engineer at SpaceX. Personal site with links to Sid's YouTube, GitHub, and LinkedIn, plus an interactive three-body gravity simulation.";
 const ogImage = new URL("/og.png", siteUrl).href;
@@ -34,7 +34,8 @@ const structuredData = {
 			"@type": "WebSite",
 			"@id": `${siteUrl}#website`,
 			url: siteUrl,
-			name,
+			name: searchName,
+			alternateName: name,
 			inLanguage: "en",
 			publisher: { "@id": `${siteUrl}#person` },
 		},

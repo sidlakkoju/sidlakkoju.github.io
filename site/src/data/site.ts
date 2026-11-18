@@ -1,4 +1,5 @@
 export const name = "Sid Lakkoju";
+export const searchName = "sid lakkoju";
 export const siteUrl = "https://sidlakkoju.github.io/";
 
 export const profiles = {
